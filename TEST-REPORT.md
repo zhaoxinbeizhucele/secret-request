@@ -41,6 +41,15 @@
 
 上述安装证据来自本地来源；GitHub 来源另行验证并记录。本次没有重跑上表的 122 项核心流程，也没有新增真实群通知或 macOS 验收。
 
+## GitHub 公开发布验证
+
+2026-10-10 创建公开仓库 [zhaoxinbeizhucele/secret-request](https://github.com/zhaoxinbeizhucele/secret-request)，初次发布提交为 `51175de`。README 已使用真实仓库来源。
+
+- 对 68 个待提交文件进行静态检查，未发现已知本机配置值、常见生产凭据或私钥标识；设备配置、运行环境、构建缓存和本地测试产物未提交。这是发布前静态检查，不代表完整二进制安全审计。
+- 在新的临时项目运行 `npx --yes skills@1.7.2 add zhaoxinbeizhucele/secret-request --skill secret-request -a codex --copy -y`，实际 GitHub 克隆、skill 发现及安装全部成功，没有使用全局安装。
+- 从 GitHub 下载的 skill 新建独立 Python 环境、导入虚构配置，生成入口的 `--help` 和 `pip check` 通过；包含空格的应用与配置目录可用。配置字节与源文件一致，Windows ACL 禁用继承；下载的通知组件与待发布版本的 SHA-256 一致。
+- 发布后重新确认本机全局 skill、应用和默认配置目录仍未安装。没有部署或重启中转服务，也没有向真实群发送通知。真人的新会话发现和实际任务验收仍需执行下方清单。
+
 ## 尚未执行
 
 - macOS 编译、系统通知权限和实际点击：当前没有可用的 Mac 环境。
