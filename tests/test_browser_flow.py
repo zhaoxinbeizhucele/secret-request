@@ -138,6 +138,53 @@ def test_legacy_and_decline(browser_system):
     declined = create(base); page.goto(declined['url'])
     page.locator('#decline').click()
     playwright.expect(page.locator('#status')).to_have_text('你已拒绝这次请求。')
+    assert page.locator('#form').is_hidden() and page.locator('#close-hint').is_visible()
+    assert '已拒绝并清空输入' in page.locator('#close-hint').inner_text()
+    context.close()
+
+
+def test_script_opened_page_closes_on_decline(browser_system):
+    browser, base = browser_system
+    context = browser.new_context()
+    opener = context.new_page(); opener.goto(base)
+    created = create(base)
+    with opener.expect_popup() as popup:
+        opener.evaluate('(url) => window.open(url)', created['url'])
+    page = popup.value
+    fill(page)
+    with page.expect_event('close'):
+        page.locator('#decline').click()
+    # Reopening a completed link displays its state without closing the page.
+    page = context.new_page(); page.goto(created['url'])
+    playwright.expect(page.locator('#status')).to_have_text('你已拒绝这次请求。')
     assert page.locator('#form').is_hidden() and page.locator('#close-hint').is_hidden()
+    context.close()
+
+
+@pytest.mark.parametrize('lost_response', [False, True])
+def test_decline_closes_only_after_confirmed_success(browser_system, lost_response):
+    browser, base = browser_system
+    context = browser.new_context()
+    page = context.new_page()
+    page.add_init_script('window.close = () => { window.closeAttempts = (window.closeAttempts || 0) + 1; };')
+    created = create(base); page.goto(created['url']); fill(page)
+    def interrupt(route):
+        if lost_response:
+            assert route.fetch().status == 200
+        route.abort()
+    page.route('**/decline', interrupt)
+    page.locator('#decline').click()
+    if not lost_response:
+        page.locator('#error').wait_for(state='visible')
+        assert page.evaluate('window.closeAttempts || 0') == 0
+        assert page.locator('#form').is_visible()
+        assert page.locator('#field-password').input_value() == 'FAKE-ONLY-TEST'
+        page.unroute('**/decline', interrupt)
+        page.locator('#decline').click()
+    page.locator('#close-hint').wait_for(state='visible')
+    assert page.evaluate('window.closeAttempts') == 1
+    assert page.locator('#form').is_hidden()
+    assert all(page.locator('#field-' + field).input_value() == '' for field in ['username', 'password', 'key'])
+    assert '未提供机密' in page.locator('#close-hint').inner_text()
     context.close()
 

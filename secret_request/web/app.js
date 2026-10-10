@@ -3,7 +3,7 @@ import { encryptSecret } from "./crypto.js";
 const $ = (id) => document.getElementById(id);
 const requestId = location.pathname.split("/")[2];
 const token = location.hash.slice(1);
-let current, busy = false, pendingEnvelope, countdown = 0, rendered = false, attemptedSubmission = false, finished = false;
+let current, busy = false, pendingEnvelope, countdown = 0, rendered = false, attemptedSubmission = false, attemptedDecline = false, finished = false;
 const fieldInputs = new Map();
 const states = {
   pending: "请确认请求用途，再决定是否提供机密。",
@@ -52,14 +52,17 @@ function renderFields(fields) {
     group.append(wrap); $("fields").append(group); fieldInputs.set(field.id, input);
   }
 }
-function submitted() {
+function finish(status, hint) {
   if (finished) return;
   finished = true; clearInput(); pendingEnvelope = undefined;
   $("form").hidden = true; $("error").hidden = true;
-  $("status").textContent = "已提交，等待发起程序取回。";
+  $("status").textContent = status;
+  $("close-hint").textContent = hint + "若浏览器未自动关闭，请关闭此标签页。";
   $("close-hint").hidden = false;
   window.close();
 }
+function submitted() { finish("已提交，等待发起程序取回。", "已提交并清空输入。"); }
+function declined() { finish(states.declined, "已拒绝并清空输入，未提供机密。"); }
 function setBusy(value, action = "submit") {
   busy = value;
   for (const input of $("form").querySelectorAll("input,textarea,button")) input.disabled = value;
@@ -93,6 +96,7 @@ async function refresh() {
     $("form").hidden = current.state !== "pending";
     renderFields(current.fields);
     if (attemptedSubmission && ["submitted", "consumed"].includes(current.state)) { submitted(); return; }
+    if (attemptedDecline && current.state === "declined") { declined(); return; }
     if (current.state !== "pending") { clearInput(); pendingEnvelope = undefined; }
     tick();
   } catch (failure) {
@@ -165,10 +169,14 @@ $("form").onsubmit = async (event) => {
   } finally { setBusy(false); }
 };
 $("decline").onclick = async () => {
-  if (busy) return;
+  if (busy || finished || current?.state !== "pending") return;
   setBusy(true, "decline");
-  try { await api("/decline", {}); clearInput(); pendingEnvelope = undefined; await refresh(); }
-  catch { error("拒绝尚未确认，请检查连接后重试。"); }
+  attemptedDecline = true;
+  try { await api("/decline", {}); declined(); }
+  catch {
+    await refresh();
+    if (!finished) error("拒绝尚未确认，请检查连接后重试。");
+  }
   finally { setBusy(false); }
 };
 if (!requestId || !token) {
