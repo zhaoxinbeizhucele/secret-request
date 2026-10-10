@@ -1,6 +1,6 @@
-# Secret Request 0.2
+# Secret Request 0.3
 
-Agent 发起申请，用户点击通知在网页填写，客户端取回密文并在本地交给任务程序。支持 Windows、macOS 本机通知和客户端 webhook。应用按需运行；同一份程序可以连接自部署服务或受信任的共享服务。
+Agent 匿名发起申请，用户点击通知在网页填写，客户端取回密文并在本地交给任务程序。支持 Windows、macOS 本机通知和客户端 webhook。应用按需运行；同一份程序可以连接自部署服务或受信任的共享服务。无需账号、设备登记、配对码或长期接入 token。
 
 ```mermaid
 sequenceDiagram
@@ -23,54 +23,54 @@ sequenceDiagram
 
 使用端支持标准的 [`npx skills`](https://github.com/vercel-labs/skills) 分发。完整 skill 位于 `skills/secret-request`，包含客户端、安装器及通知组件；服务端仍独立部署。
 
-从 GitHub 安装到 Codex：
+从 GitHub 安装，按提示选择 Agent：
 
 ```powershell
-npx skills add zhaoxinbeizhucele/secret-request --skill secret-request -g -a codex -y
+npx skills add zhaoxinbeizhucele/secret-request -g
 ```
 
-Claude Code：
+也可以直接指定 Codex 或 Claude Code：
 
 ```sh
+npx skills add zhaoxinbeizhucele/secret-request --skill secret-request -g -a codex -y
 npx skills add zhaoxinbeizhucele/secret-request --skill secret-request -g -a claude-code -y
 ```
 
 也可以用 `-a codex claude-code` 同时安装到两者。需要项目内安装时省略 `-g`，需要独立副本时加 `--copy`。本地开发可将来源替换为 `./`；Windows 的本地来源使用 `/`，例如 `./skills`，不要把 `.\skills` 误当成 Git 来源。
 
-`npx skills` 安装 skill 文件，不执行应用安装脚本。安装后在新会话要求 Agent 初始化客户端；Agent 根据 skill 内的 [安装指引](skills/secret-request/references/setup.md) 建立独立运行环境，导入设备配置，然后使用工具。需要 Node.js 22.20+ 运行当前 Skills CLI、Python 3.12+ 运行客户端。客户端不需要配置中转服务的 Docker。
+`npx skills` 安装 skill 文件，不执行应用安装脚本。安装后在新会话告诉 Agent：“初始化 secret-request，服务地址是 https://your-relay.example，使用本机通知。”Agent 根据 [安装指引](skills/secret-request/references/setup.md) 建立独立运行环境、自动生成配置并检查服务连接；不知道地址时应只询问服务 URL。需要 Node.js 22.20+ 运行当前 Skills CLI、Python 3.12+ 运行客户端。使用端无需 Docker，也不用取得任何管理员配置文件。
 
-也可以手动初始化。以下 `<skill目录>` 指当前安装的 skill 位置，适用于 Codex、Claude Code 的复制或链接安装。设备配置由服务管理员提供：
+也可以手动初始化。以下 `<skill目录>` 指当前安装的 skill 位置；将示例 URL 换成自己部署或选择的可信服务地址：
 
 Windows：
 
 ```powershell
-python -I "<skill目录>\scripts\install.py" --config-file "<设备配置文件路径>"
-& "$env:LOCALAPPDATA\Programs\SecretRequest\secret-request.cmd" --help
+python -I "<skill目录>\scripts\install.py" --url "https://your-relay.example"
+& "$env:LOCALAPPDATA\Programs\SecretRequest\secret-request.cmd" --check-service
 ```
 
 macOS / Linux：
 
 ```sh
-python3 -I '<skill目录>/scripts/install.py' --config-file '<设备配置文件路径>'
-~/.local/share/secret-request/secret-request --help
+python3 -I '<skill目录>/scripts/install.py' --url 'https://your-relay.example'
+~/.local/share/secret-request/secret-request --check-service
 ```
 
-安装器建立独立 Python 环境和命令入口。新设备可通过 `--config-file` 导入配置，导入时验证格式、保护文件权限，不覆盖已有配置，也不打印凭据；已有配置时省略该参数。需要短命令时自行把入口目录加入 PATH。Windows 分发包携带已构建的通知组件，目标机无需 .NET；macOS 安装本机通知组件需 Apple Command Line Tools，再执行安装器的 `--build-notifier`。只有 webhook 时不必构建本机组件。Linux 使用 webhook，本机通知暂未实现。
+安装器建立独立 Python 环境和命令入口，按 URL 自动生成配置并限制文件读取权限。同一服务可重复初始化，已有通知设置会保留；已有配置时可省略 `--url`，不同服务地址会报错并保留原配置。`--check-service` 只检查连接和匿名接入兼容性，不创建申请或发送通知。需要短命令时自行把入口目录加入 PATH。Windows 分发包携带已构建的通知组件，目标机无需 .NET；macOS 安装本机通知组件需 Apple Command Line Tools，再执行安装器的 `--build-notifier`。只有 webhook 时不必构建本机组件。Linux 使用 webhook，本机通知暂未实现。
 
-更新 skill 用 `npx skills update`，然后运行其安装器更新依赖和入口，设备认证继续沿用。用户自行解压安装时也可使用 `artifacts/secret-request-client.zip`，其中不含设备配置；当前 Windows 组件使解压体积超过 Skills CLI 的直接下载默认上限，`npx skills` 分发采用 Git 或本地目录来源。
+更新 skill 用 `npx skills update`，然后运行其安装器更新依赖和入口，服务地址与通知设置继续沿用。用户自行打包后也可解压 `artifacts/secret-request-client.zip` 安装；分发包不包含用户配置。当前 Windows 组件使解压体积超过 Skills CLI 的直接下载默认上限，`npx skills` 分发采用 Git 或本地目录来源。
 
-设备配置是私有文件，不进入 skill、分发包或 Git 仓库。每位用户应从所使用的服务管理员取得自己设备的配置；更新或重新安装时沿用原配置。
+GitHub 提供客户端和服务端源码，不预设一个面向公众开放的官方服务。服务地址由部署者提供；私网服务仍需处于对应网络才能连接。
 
 开发者可运行 `python scripts/build_native.py` 构建当前系统组件；Windows 构建需要 .NET 10 SDK。通知组件没有菜单、托盘或开机启动项，Windows 发送后退出；macOS 等待本条通知点击或到期，申请结束时客户端会回收它。
 
 ## 客户端配置
 
-将服务管理员提供的、属于该设备的 `client.json` 放到 `~/.config/secret-request/client.json`，仅本人可读。下面均为示例，不是有效的服务凭据：
+初始化会自动生成 `~/.config/secret-request/client.json`。只使用本机通知时，只需服务 URL。需要 webhook 时，可以让安装器引用已有的环境变量，例如增加 `--webhook-type wecom --webhook-env SECRET_REQUEST_WEBHOOK`；仅用 webhook 时再加 `--no-local-notification`。以下是自动生成配置的结构示例，无需先准备这个文件：
 
 ```json
 {
   "url":"https://your-relay.example",
-  "request_token":"REPLACE_WITH_YOUR_DEVICE_TOKEN",
   "notifications":{
     "local":true,
     "webhook":{
@@ -123,15 +123,17 @@ secret-request --revoke-session '<handle>'
 安装 `requirements.txt` 中依赖。生成新配置时必须使用不存在的输出目录，脚本拒绝覆盖和隐式轮换：
 
 ```sh
-python scripts/provision.py --url https://your-relay.example --device laptop --device workstation --output runtime
+python scripts/provision.py --url https://your-relay.example --output runtime
 docker compose -f deploy/compose.yaml up -d --build relay
 ```
 
-每台设备只分发其自己的 client.json，服务保留 relay.json。Docker 仅绑定 127.0.0.1:8787；用可信 HTTPS 反向代理或 Tailscale Serve 暴露，并使配置 base_url 与实际浏览器入口一致。公开源码不会自动部署中转服务，也不会改变现有服务的访问范围。
+脚本只生成服务端 `relay.json`，最小内容为 `{"base_url":"https://your-relay.example"}`。把 URL 提供给使用者即可，无需生成或分发设备凭据。Docker 仅绑定 127.0.0.1:8787；用可信 HTTPS 反向代理或 Tailscale Serve 暴露，并使配置 base_url 与实际浏览器入口一致。公开源码不会自动部署中转服务，也不会改变现有服务的访问范围。
 
-服务只支持单 worker。密文及申请存在内存，不建历史数据库；重启使未交付申请失效，但已取回的本机会话不依赖服务。默认最多 128 条在途申请，每个设备最多 8 条、每分钟创建 20 条，可在 relay.json 调整。已结束的元数据短期保留用于状态查询，到申请截止时间后 10 分钟删除，总量也有限制。
+服务只支持单 worker。密文及申请存在内存，不建历史数据库；重启使未交付申请失效，但已取回的本机会话不依赖服务。默认最多 128 条在途申请；同一来源 IP 最多 8 条、每分钟创建 20 条，服务整体每分钟最多创建 120 条。对应设置为 `max_requests`、`max_requests_per_ip`、`requests_per_minute`、`global_requests_per_minute`。已结束元数据在申请截止时间后 10 分钟删除，总量及限流记录也有限制。
 
-本版无登录和全局列表。创建需设备凭据；填写/拒绝与状态/取消/领取使用互相独立的单条随机凭据。服务只保留其哈希，不提供申请枚举入口。填写链接持有者有处理权限：发到群里意味着群成员也可以填写或拒绝，不能据此领取输入。领取为一次性，响应丢失不能再次领取，应核对后重新申请。
+默认部署不信任转发头，按实际连接来源限流；经过反向代理时，使用者可能共享代理的限额。部署者可在可信入口额外按真实客户端 IP 限流，不要直接信任公网传来的 X-Forwarded-For。来源地址仅以随机盐哈希暂存在进程中，不展示给填写者；匿名指无需账号与设备登记，不代表隐藏网络地址。
+
+本版无登录、配对和全局列表。任何能连接服务的客户端都可以创建申请；填写/拒绝与状态/取消/领取使用互相独立的单条随机凭据。服务只保留其哈希，不提供申请枚举入口。Agent 名称由申请方声明，不代表验证过身份。填写链接持有者有处理权限：发到群里意味着群成员也可以填写或拒绝，不能据此领取输入。领取为一次性，响应丢失不能再次领取，应核对后重新申请。
 
 浏览器采用 RSA-OAEP/SHA-256 包装 AES-256-GCM 密钥并绑定请求 ID；私钥留在发起电脑。正常服务只拿到密文。用户仍需信任提供网页的服务：被篡改的网页可以在加密前访问输入；本机完整权限的程序也不受隔离。工具不长期保存输入，但不能承诺擦除所有内存、交换文件或转储副本。
 
@@ -146,4 +148,4 @@ python scripts/package_deploy.py
 
 客户端变更后重新生成 skill 再分发。服务器包排除配置、测试端点和本机通知二进制。验证范围和人工验收见 [TEST-REPORT.md](TEST-REPORT.md)。
 
-0.1 升级到 0.2 是不兼容重构：relay.json 只保留 base_url、clients 及新限额配置；客户端 token 可以沿用。旧 reviewer、ntfy、全局列表、托盘和开机启动项退役；旧服务不能与新客户端混用。已有历史数据库不再被读取，处理其旧备份属于部署迁移步骤。
+0.2 升级到 0.3：先备份服务配置，移除 `clients`，把 `max_requests_per_client` 改为 `max_requests_per_ip`（如曾设置），然后更新并重启服务。此后所有能连接服务的客户端均可匿名创建申请；旧未完成申请会随重启失效。客户端更新 skill 后运行安装器，会保留服务地址和通知设置并移除旧 `request_token`，无需重新获取文件。0.3 客户端不能连接仍要求设备凭据的 0.2 服务，`--check-service` 会提示升级。旧 reviewer、ntfy、全局列表、托盘、开机启动项和历史数据库均已退役。

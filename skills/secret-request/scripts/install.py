@@ -1,5 +1,7 @@
-"""Install a skill's isolated runtime and optionally import protected device configuration."""
+"""Initialize an anonymous client from a service URL; no enrollment credentials."""
 import argparse
+from contextlib import contextmanager
+import json
 import os
 from pathlib import Path
 import shlex
@@ -21,15 +23,72 @@ def restrict_access(path):
         path.chmod(0o700 if path.is_dir() else 0o600)
 
 
-def install_configuration(source, destination, python, scripts):
-    with source.open('rb') as file:
-        content = file.read(65537)
-    if len(content) > 65536:
-        raise ValueError('Configuration file exceeds 64 KiB')
+@contextmanager
+def configuration_lock(directory):
+    if not directory.exists():
+        directory.mkdir(parents=True, mode=0o700, exist_ok=True)
+        restrict_access(directory)
+    # The empty lock file is persistent; the OS releases its lock even after a crash.
+    path = directory/'.init.lock'
+    with path.open('a+b') as handle:
+        restrict_access(path)
+        if handle.seek(0, os.SEEK_END) == 0:
+            handle.write(b'\0')
+            handle.flush()
+        handle.seek(0)
+        if os.name == 'nt':
+            import msvcrt
+            msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(handle, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            handle.seek(0)
+            if os.name == 'nt':
+                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                fcntl.flock(handle, fcntl.LOCK_UN)
+
+
+def configure_client(url, destination, python, scripts, local=None, webhook_type='wecom', webhook_env=None):
+    with configuration_lock(destination.parent):
+        return _configure_client(url, destination, python, scripts, local, webhook_type, webhook_env)
+
+
+def _configure_client(url, destination, python, scripts, local, webhook_type, webhook_env):
+    previous = None
+    config = {}
     if destination.exists():
-        if destination.read_bytes() != content:
-            raise ValueError('Configuration already exists; it was not overwritten')
-        return False
+        with destination.open('rb') as file:
+            previous = file.read(65537)
+        if len(previous) > 65536:
+            raise ValueError('Configuration file exceeds 64 KiB')
+        try:
+            config = json.loads(previous.decode('utf-8-sig'))
+        except (ValueError, UnicodeError):
+            raise ValueError('Invalid existing client configuration') from None
+        if not isinstance(config, dict) or set(config) - {'url', 'notifications', 'request_token'}:
+            raise ValueError('Invalid existing client configuration')
+        if not isinstance(config.get('url'), str):
+            raise ValueError('Invalid existing service URL')
+        if url and config.get('url', '').rstrip('/') != url.rstrip('/'):
+            raise ValueError('Another service is configured; it was not overwritten')
+        # Upgrade 0.2 without retaining or sending its obsolete enrollment credential.
+        config.pop('request_token', None)
+    if url:
+        config['url'] = url.rstrip('/')
+    if not config.get('url'):
+        raise ValueError('First initialization requires --url https://your-relay.example')
+    notifications = config.setdefault('notifications', {'local': True})
+    if not isinstance(notifications, dict):
+        raise ValueError('Invalid existing notification configuration')
+    if local is not None:
+        notifications['local'] = local
+    if webhook_env:
+        notifications['webhook'] = {'type': webhook_type, 'url_env': webhook_env}
+    content = json.dumps(config, ensure_ascii=False, indent=2).encode('utf-8')
     if not destination.parent.exists():
         destination.parent.mkdir(parents=True, mode=0o700)
         restrict_access(destination.parent)
@@ -44,12 +103,18 @@ def install_configuration(source, destination, python, scripts):
         result = subprocess.run([str(python), '-I', '-X', 'utf8', '-c', code,
                                  str(scripts), str(temporary)], capture_output=True)
         if result.returncode:
-            raise ValueError('Invalid client configuration; nothing was imported')
-        try:
-            # Publish without replacing a file created concurrently by another installer.
-            os.link(temporary, destination)
-        except FileExistsError:
-            raise ValueError('Configuration already exists; it was not overwritten') from None
+            raise ValueError('Invalid service URL or notification settings; configuration unchanged')
+        if previous is not None:
+            if destination.read_bytes() != previous:
+                raise ValueError('Configuration changed during initialization; retry')
+            if json.loads(previous.decode('utf-8-sig')) == config:
+                return False
+            os.replace(temporary, destination)
+        else:
+            try:
+                os.link(temporary, destination)
+            except FileExistsError:
+                raise ValueError('Configuration already exists; it was not overwritten') from None
         return True
     finally:
         temporary.unlink(missing_ok=True)
@@ -59,8 +124,13 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--application-directory', type=Path)
     parser.add_argument('--build-notifier', action='store_true')
-    parser.add_argument('--config-file', type=Path, help='Import a device JSON file; never overwrite existing configuration')
+    parser.add_argument('--url', help='HTTPS relay URL; required for first initialization, no token or pairing code')
     parser.add_argument('--config-directory', type=Path, help='Configuration directory; defaults to ~/.config/secret-request')
+    local = parser.add_mutually_exclusive_group()
+    local.add_argument('--local-notification', dest='local', action='store_true', default=None)
+    local.add_argument('--no-local-notification', dest='local', action='store_false')
+    parser.add_argument('--webhook-type', choices=('wecom', 'generic'), default='wecom')
+    parser.add_argument('--webhook-env', help='Name of an existing environment variable containing the webhook URL')
     args = parser.parse_args()
     if sys.version_info < (3,12):
         parser.error('Python 3.12 or newer is required')
@@ -69,6 +139,8 @@ def main():
                     if os.name == 'nt' else Path.home()/'.local/share/secret-request')
     application = application.resolve()
     config_file = (args.config_directory or Path.home()/'.config/secret-request').resolve()/'client.json'
+    if not config_file.exists() and not args.url:
+        parser.error('First initialization requires --url https://your-relay.example')
     application.mkdir(parents=True, exist_ok=True)
     runtime = application/'runtime'
     python = runtime/('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
@@ -78,9 +150,9 @@ def main():
                     '-r',str(scripts/'requirements.txt')], check=True)
     if args.build_notifier:
         subprocess.run([str(python),'-I',str(scripts/'build_native.py')], check=True)
-    if args.config_file:
-        imported = install_configuration(args.config_file.resolve(), config_file, python, scripts)
-        print('Device configuration imported.' if imported else 'Existing device configuration retained.')
+    configured = configure_client(args.url, config_file, python, scripts, args.local,
+                                  args.webhook_type, args.webhook_env)
+    print('Client configuration saved.' if configured else 'Existing client configuration retained.')
     subprocess.run([str(python),'-I','-X','utf8',str(scripts/'secret_request_cli.py'),'--help'],
                    check=True, stdout=subprocess.DEVNULL)
     if os.name == 'nt':
@@ -94,8 +166,6 @@ def main():
                            shlex.quote(str(scripts/'secret_request_cli.py'))+' --config '+shlex.quote(str(config_file))+' "$@"\n',encoding='utf-8')
         wrapper.chmod(0o700)
     print('Client installed: '+str(wrapper))
-    if not config_file.exists():
-        print('Before use, import your device configuration with --config-file <path>.')
 
 
 if __name__ == '__main__':

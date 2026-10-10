@@ -12,7 +12,7 @@ def key():
 def system(key):
     tokens = {name: secrets.token_urlsafe(32) for name in ("agent", "other", "reviewer")}
     now = [100.0]
-    app = create_app(Settings("http://testserver", {"xin-ws": {"token": tokens["agent"]}, "xin-pc": {"token": tokens["other"]}}, allow_local_http=True), clock=lambda: now[0])
+    app = create_app(Settings("http://testserver", allow_local_http=True), clock=lambda: now[0])
     with TestClient(app) as client:
         yield client, app, tokens, now
 
@@ -21,7 +21,7 @@ def auth(token):
 
 def request(client, tokens, key, **extra):
     payload = {"name": "测试凭据", "purpose": "仅用于测试", "public_key": public_jwk(key), **extra}
-    response = client.post("/api/requests", json=payload, headers=auth(tokens["agent"]))
+    response = client.post("/api/requests", json=payload)
     assert response.status_code == 201, response.text
     result = response.json()
     result["submit_token"] = result["input_url"].split("#")[1]

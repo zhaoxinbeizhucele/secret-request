@@ -38,7 +38,7 @@ def test_capabilities_are_distinct(system, key):
     assert client.get(f"/api/requests/{rid}", headers=auth(result["receive_token"])).status_code == 404
     assert client.get(f"/api/requests/{rid}/status", headers=auth(result["submit_token"])).status_code == 404
     assert client.get("/api/pending", headers=auth(tokens["agent"])).status_code == 404
-    assert client.post("/api/requests", json={"name":"a","purpose":"b","public_key":public_jwk(key)}, headers=auth(tokens["reviewer"])).status_code == 401
+    assert client.post("/api/requests", json={"name":"a","purpose":"b","public_key":public_jwk(key)}).status_code == 201
 
 @pytest.mark.parametrize("terminal", ["decline", "cancel"])
 def test_terminal_states_fail_closed(system, key, terminal):
@@ -107,37 +107,54 @@ def test_per_request_capabilities_cannot_cross_requests(system, key):
     assert client.post('/api/review-sessions', headers=auth(tokens['agent']), json={}).status_code == 404
 
 
-def test_device_quota_rate_limit_and_registered_name(key):
-    settings = Settings('http://testserver', {'real': {'token': 'a'*43}, 'other': {'token': 'b'*43}},
-                        max_requests_per_client=1, requests_per_minute=1, allow_local_http=True)
+def test_anonymous_source_quota_rate_limit_and_no_ip_disclosure(key):
+    settings = Settings('http://testserver', max_requests_per_ip=1,
+                        requests_per_minute=1, allow_local_http=True)
     now = [0.0]
-    with TestClient(create_app(settings, clock=lambda: now[0])) as client:
+    app = create_app(settings, clock=lambda: now[0])
+    with TestClient(app, client=('192.0.2.1', 1000)) as client:
+        other = TestClient(app, client=('192.0.2.2', 1000))
         payload = {'name': 'fake', 'purpose': 'test', 'public_key': public_jwk(key), 'ttl_seconds': 10}
-        first = client.post('/api/requests', json=payload, headers=auth('a'*43)).json()
+        first = client.post('/api/requests', json=payload).json()
         details = client.get('/api/requests/'+first['id'], headers=auth(first['input_url'].split('#')[1])).json()
-        assert details['device'] == 'real'
-        assert client.post('/api/requests', json=payload, headers=auth('a'*43)).status_code == 429
-        assert client.post('/api/requests', json=payload, headers=auth('b'*43)).status_code == 201
+        assert 'device' not in details and '192.0.2.1' not in json.dumps(details)
+        assert '192.0.2.1' not in repr(app.state.entries)
+        assert client.post('/api/requests', json=payload, headers={'X-Forwarded-For':'192.0.2.9'}).status_code == 429
+        assert other.post('/api/requests', json=payload).status_code == 201
         client.post('/api/requests/'+first['id']+'/cancel', json={}, headers=auth(first['receive_token']))
-        assert client.post('/api/requests', json=payload, headers=auth('a'*43)).status_code == 429
+        assert client.post('/api/requests', json=payload).status_code == 429
         now[0] = 60
-        assert client.post('/api/requests', json=payload, headers=auth('a'*43)).status_code == 201
+        assert client.post('/api/requests', json=payload).status_code == 201
+        other.close()
+
+
+def test_global_rate_limit_across_anonymous_sources(key):
+    now = [0.0]
+    app = create_app(Settings('http://testserver', global_requests_per_minute=1,
+                             allow_local_http=True), clock=lambda: now[0])
+    with TestClient(app, client=('192.0.2.1', 1000)) as first:
+        other = TestClient(app, client=('192.0.2.2', 1000))
+        payload = {'name':'fake','purpose':'test','public_key':public_jwk(key)}
+        assert first.post('/api/requests', json=payload).status_code == 201
+        assert other.post('/api/requests', json=payload).status_code == 429
+        now[0] = 60
+        assert other.post('/api/requests', json=payload).status_code == 201
+        other.close()
 
 
 @pytest.mark.parametrize('url', ['http://example.test', 'https://u:p@example.test', 'https://example.test/path', 'https://example.test/#x'])
 def test_invalid_service_url(url):
     with pytest.raises(ValueError):
-        Settings(url, {'device': {'token': 'a'*43}})
+        Settings(url)
 
 
-def test_duplicate_device_keys_rejected():
-    with pytest.raises(ValueError):
-        Settings('https://example.test', {'one': {'token': 'a'*43}, 'two': {'token': 'a'*43}})
+def test_health_reports_anonymous_protocol(system):
+    assert system[0].get('/health').json() == {'status':'ok','version':'0.3.0','access':'anonymous'}
 
 
 def test_restart_loses_inflight_requests(system, key):
     client, app, tokens, now = system
     created = request(client, tokens, key)
-    fresh = create_app(Settings('http://testserver', {'real': {'token': tokens['agent']}}, allow_local_http=True))
+    fresh = create_app(Settings('http://testserver', allow_local_http=True))
     with TestClient(fresh) as restarted:
         assert restarted.get('/api/requests/'+created['id']+'/status', headers=auth(created['receive_token'])).status_code == 404

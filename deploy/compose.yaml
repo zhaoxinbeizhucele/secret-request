@@ -4,7 +4,7 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
-    image: local/secret-request:0.2.0
+    image: local/secret-request:0.3.0
     container_name: secret-request-relay
     restart: unless-stopped
     ports: ["127.0.0.1:8787:8787"]

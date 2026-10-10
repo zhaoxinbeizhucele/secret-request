@@ -30,10 +30,10 @@ HEADERS = {"Cache-Control": "no-store", "Referrer-Policy": "no-referrer",
 @dataclass
 class Settings:
     base_url: str
-    clients: dict
     max_requests: int = 128
-    max_requests_per_client: int = 8
+    max_requests_per_ip: int = 8
     requests_per_minute: int = 20
+    global_requests_per_minute: int = 120
     allow_local_http: bool = False
 
     def __post_init__(self):
@@ -44,19 +44,9 @@ class Settings:
         if not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment or parsed.path not in {"", "/"}:
             raise ValueError("invalid service URL")
         self.base_url = self.base_url.rstrip("/")
-        if not isinstance(self.clients, dict) or not self.clients:
-            raise ValueError("device access required")
-        tokens = []
-        for name, client in self.clients.items():
-            if (not isinstance(name, str) or not 1 <= len(name) <= 64 or any(ord(c) < 32 for c in name)
-                    or not isinstance(client, dict) or set(client) != {"token"}
-                    or not isinstance(client["token"], str) or len(client["token"]) < 32):
-                raise ValueError("invalid device access")
-            tokens.append(client["token"])
-        if len(set(tokens)) != len(tokens):
-            raise ValueError("devices must use different tokens")
         if any(type(v) is not int or not 1 <= v <= 1024 for v in
-               (self.max_requests, self.max_requests_per_client, self.requests_per_minute)):
+               (self.max_requests, self.max_requests_per_ip, self.requests_per_minute,
+                self.global_requests_per_minute)):
             raise ValueError("invalid request limit")
 
 
@@ -73,7 +63,7 @@ class CreateBody(BaseModel):
 @dataclass
 class Entry:
     id: str
-    owner: str
+    source: str
     name: str
     purpose: str
     public_key: dict
@@ -99,11 +89,19 @@ def bearer(request):
 
 def create_app(settings: Settings, clock=time.monotonic):
     entries = {}
-    rates = {name: deque() for name in settings.clients}
+    rates, global_rate = {}, deque()
+    source_salt = secrets.token_bytes(32)
     lock = asyncio.Lock()
 
     def purge():
         now = clock()
+        for source, recent in list(rates.items()):
+            while recent and recent[0] <= now - 60:
+                recent.popleft()
+            if not recent:
+                rates.pop(source, None)
+        while global_rate and global_rate[0] <= now - 60:
+            global_rate.popleft()
         for entry in list(entries.values()):
             if now >= entry.deadline and entry.state in {"pending", "submitted"}:
                 entry.state, entry.envelope = "expired", None
@@ -159,13 +157,6 @@ def create_app(settings: Settings, clock=time.monotonic):
     async def invalid_input(request, exc):
         return JSONResponse({"error": "invalid_request"}, status_code=422)
 
-    def owner(request):
-        token = digest(bearer(request))
-        for name, config in settings.clients.items():
-            if hmac.compare_digest(token, digest(config["token"])):
-                return name
-        raise HTTPException(401, "unauthorized")
-
     def find(rid, request, role):
         purge()
         entry = entries.get(rid)
@@ -174,18 +165,20 @@ def create_app(settings: Settings, clock=time.monotonic):
         return entry
 
     def public(entry):
-        return {"id": entry.id, "device": entry.owner, "name": entry.name, "purpose": entry.purpose,
+        return {"id": entry.id, "name": entry.name, "purpose": entry.purpose,
                 "expires_at": entry.expires_at, "remaining_seconds": max(0, entry.deadline - clock()),
                 "state": entry.state, "public_key": entry.public_key, "agent": entry.agent,
                 "fields": entry.fields, "created_at": entry.created_at}
 
     @app.get("/health")
     async def health():
-        return {"status": "ok", "version": "0.2.0"}
+        return {"status": "ok", "version": "0.3.0", "access": "anonymous"}
 
     @app.post("/api/requests", status_code=201)
     async def create(body: CreateBody, request: Request):
-        device = owner(request)
+        # Use the actual ASGI peer, never an untrusted Forwarded/X-Forwarded-For header.
+        peer = request.client.host if request.client else "unknown"
+        source = hmac.new(source_salt, peer.encode(), hashlib.sha256).hexdigest()
         if not body.name.strip() or not body.purpose.strip() or any(ord(c) < 32 for c in body.name):
             raise HTTPException(422, "invalid_request")
         try:
@@ -196,20 +189,22 @@ def create_app(settings: Settings, clock=time.monotonic):
         async with lock:
             purge()
             active = [e for e in entries.values() if e.state in {"pending", "submitted"}]
-            recent = rates[device]
-            while recent and recent[0] <= clock() - 60:
-                recent.popleft()
+            recent = rates.get(source, deque())
             if (len(active) >= settings.max_requests or len(entries) >= settings.max_requests * 4
-                    or sum(e.owner == device for e in active) >= settings.max_requests_per_client
-                    or len(recent) >= settings.requests_per_minute):
+                    or sum(e.source == source for e in active) >= settings.max_requests_per_ip
+                    or len(recent) >= settings.requests_per_minute
+                    or len(global_rate) >= settings.global_requests_per_minute
+                    or (source not in rates and len(rates) >= settings.max_requests * 4)):
                 raise HTTPException(429, "request_limit")
             rid, submit, receive = secrets.token_urlsafe(18), secrets.token_urlsafe(32), secrets.token_urlsafe(32)
-            entry = Entry(rid, device, body.name.strip(), body.purpose.strip(), body.public_key,
+            entry = Entry(rid, source, body.name.strip(), body.purpose.strip(), body.public_key,
                           digest(submit), digest(receive), clock() + body.ttl_seconds,
                           datetime.fromtimestamp(time.time() + body.ttl_seconds, timezone.utc).isoformat(),
                           agent, fields, datetime.now(timezone.utc).isoformat())
             entries[rid] = entry
+            rates[source] = recent
             recent.append(clock())
+            global_rate.append(clock())
             return {"id": rid, "receive_token": receive, "state": "pending",
                     "input_url": settings.base_url + "/input/" + rid + "#" + submit,
                     "remaining_seconds": body.ttl_seconds}

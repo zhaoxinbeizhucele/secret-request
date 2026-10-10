@@ -20,7 +20,7 @@ from .notifications import input_url, notify, validate_notifications
 
 def load_config(path: Path, allow_local_http=False) -> dict:
     config = json.loads(path.read_text(encoding="utf-8-sig"))
-    if not isinstance(config, dict) or set(config) - {"url", "request_token", "notifications"}:
+    if not isinstance(config, dict) or set(config) - {"url", "notifications"}:
         raise ValueError("invalid client configuration")
     parts = urlsplit(config["url"])
     local = parts.hostname in {"localhost", "127.0.0.1", "::1", "testserver"}
@@ -28,8 +28,6 @@ def load_config(path: Path, allow_local_http=False) -> dict:
         raise ValueError("HTTPS required")
     if not parts.hostname or parts.username or parts.password or parts.query or parts.fragment or parts.path not in {"", "/"}:
         raise ValueError("invalid service URL")
-    if not isinstance(config["request_token"], str) or len(config["request_token"]) < 32:
-        raise ValueError("invalid request access")
     config["url"] = config["url"].rstrip("/")
     config["notifications"] = validate_notifications(config.get("notifications"), allow_local_http)
     return config
@@ -151,7 +149,7 @@ def run(args, client=None, on_created=None) -> int:
     client = client or httpx.Client(timeout=12, trust_env=False, follow_redirects=False)
     base = config["url"]
     try:
-        response = client.post(base + "/api/requests", headers={"Authorization": "Bearer " + config["request_token"]},
+        response = client.post(base + "/api/requests",
             json={"name": args.name, "purpose": purpose, "ttl_seconds": args.wait, "public_key": public_jwk(key),
                   "agent": agent, "fields": fields})
         response.raise_for_status()
@@ -224,6 +222,7 @@ def use_session(handle, command, timeout):
 def main():
     parser = argparse.ArgumentParser(description="通知本人输入机密，并在本机内存中交给程序使用；不返回机密。")
     parser.add_argument("--config", type=Path, default=Path.home() / ".config/secret-request/client.json")
+    parser.add_argument("--check-service", action="store_true", help="检查匿名中转服务连接，不创建申请或发送通知")
     parser.add_argument("--name", help="所需机密的名称，不要填写机密本身")
     parser.add_argument("--purpose", help="本次用途")
     parser.add_argument("--agent-name", help="申请 Agent 的显示名称（自行声明）")
@@ -249,17 +248,31 @@ def main():
     handle = args.use_session or args.session_status or args.revoke_session
     command = args.command[1:] if args.command[:1] == ["--"] else args.command
     if handle:
-        if args.name or args.purpose or args.env or args.one_shot or args.agent_name or args.fields_file or args.show_link:
+        if args.check_service or args.name or args.purpose or args.env or args.one_shot or args.agent_name or args.fields_file or args.show_link:
             parser.error("session operations reuse the original purpose, directory and input channel")
         if args.use_session and not command:
             parser.error("--use-session requires a command")
         if not args.use_session and command:
             parser.error("status/revoke do not accept a command")
+    elif args.check_service:
+        if command or args.name or args.purpose:
+            parser.error("--check-service does not create or execute a request")
     elif not args.name or not args.purpose:
         parser.error("new requests require --name and --purpose")
     if args.one_shot:
         args.session_ttl = 0
     try:
+        if args.check_service:
+            config = load_config(args.config, args.allow_local_http)
+            with httpx.Client(timeout=12, trust_env=False, follow_redirects=False) as client:
+                response = client.get(config['url'] + '/health')
+                response.raise_for_status()
+                health = response.json()
+            if health.get('status') != 'ok' or health.get('access') != 'anonymous':
+                emit(status='incompatible_service', message='服务未启用匿名接入，请联系部署者升级服务。')
+                return 2
+            emit(status='ready', access='anonymous')
+            return 0
         if handle:
             from .session import request
             if args.use_session:

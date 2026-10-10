@@ -85,8 +85,7 @@ async function refresh() {
     if (finished) return;
     countdown = performance.now() + current.remaining_seconds * 1000;
     $("title").textContent = current.name;
-    $("device").textContent = current.device;
-    $("agent").textContent = current.agent || "未注明 Agent";
+    $("agent").textContent = (current.agent || "未注明 Agent") + "（自行声明）";
     $("created").textContent = current.created_at ? new Date(current.created_at).toLocaleString("zh-CN", {hour12: false}) : "未记录";
     $("purpose").textContent = current.purpose;
     $("request").hidden = false;

@@ -14,13 +14,13 @@ People using local or remote agents who need to supply short-lived credentials. 
 An agent describes the task and required fields. A notification opens the request. The user submits encrypted values or declines. A local task program uses them without placing values in model-visible output.
 
 ## Operating Context
-Client starts on demand and waits only for its own request. Browser is responsive on desktop and phone. Native notifications require an interactive desktop; webhook works on remote machines. Hosting, device access, notification settings and service trust are explicit choices.
+Client starts on demand and waits only for its own request. Browser is responsive on desktop and phone. Native notifications require an interactive desktop; webhook works on remote machines. Initialization needs a trusted service URL and notification settings; there is no account, device enrollment, pairing or long-lived service token.
 
 ## Capabilities and Constraints
 One submission and one ciphertext collection. Multiple labelled fields. Memory-only local session expires after five idle minutes, renewed by accepted task executions and restarted after each execution ends. Status checks do not renew. No login, tenant management, global request list, server-owned notifications or long-term secret storage in this MVP.
 
 ## Product Principles
-- Show Agent, registered device, purpose, request time and remaining input time before asking for values.
+- Show the self-declared Agent, purpose, request time and remaining input time before asking for values.
 - Keep input focused on submit or decline; attempt close only after acknowledged submission.
 - Separate per-request input and retrieval permission.
 - Keep native UI limited to notifications opening the shared web form.

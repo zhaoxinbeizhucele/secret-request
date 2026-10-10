@@ -6,4 +6,4 @@ COPY secret_request ./secret_request
 USER 10001:10001
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 SECRET_REQUEST_CONFIG=/run/config/relay.json
 EXPOSE 8787
-CMD ["python", "-m", "uvicorn", "secret_request.relay:from_environment", "--factory", "--host", "0.0.0.0", "--port", "8787", "--workers", "1", "--no-access-log", "--log-level", "warning"]
+CMD ["python", "-m", "uvicorn", "secret_request.relay:from_environment", "--factory", "--host", "0.0.0.0", "--port", "8787", "--workers", "1", "--no-proxy-headers", "--no-access-log", "--log-level", "warning"]

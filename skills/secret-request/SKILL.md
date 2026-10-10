@@ -9,7 +9,7 @@ description: 已授权任务缺少密码、API Key 等机密时，发送本机�
 
 本 skill 可通过 `npx skills add` 安装，所需脚本随包分发。首次使用、用户要求安装或升级客户端时，按 [客户端初始化](references/setup.md) 完成依赖与设备配置；入口就绪时直接使用。安装只涉及本机使用端。
 
-Windows 入口为 `%LOCALAPPDATA%\Programs\SecretRequest\secret-request.cmd`；macOS / Linux 默认入口为 `~/.local/share/secret-request/secret-request`。也可使用已经配置的 `secret-request` 命令。[安装器](scripts/install.py) 支持 Python 3.12+；配置文件导入不会覆盖已有设备认证。
+Windows 入口为 `%LOCALAPPDATA%\Programs\SecretRequest\secret-request.cmd`；macOS / Linux 默认入口为 `~/.local/share/secret-request/secret-request`。也可使用已经配置的 `secret-request` 命令。[安装器](scripts/install.py) 支持 Python 3.12+，首次用服务 URL 自动生成配置。中转服务匿名接入，不需要账号、设备登记、配对码、长期 token 或管理员配置文件。
 
 ```powershell
 & "$env:LOCALAPPDATA\Programs\SecretRequest\secret-request.cmd" --agent-name 'Codex' --name '测试库登录' --purpose '查询已授权测试库的结构' --fields-file .\fields.json -- python .\query.py

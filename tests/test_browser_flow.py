@@ -61,7 +61,9 @@ def test_multi_fields_fallback_and_layout(browser_system):
     created = create(base)
     page.goto(created['url'])
     page.locator('#field-password').wait_for(state='visible')
-    assert page.locator('#agent').inner_text() == '测试 Agent'
+    assert page.locator('#agent').inner_text() == '测试 Agent（自行声明）'
+    assert page.get_by_text('申请 Agent', exact=True).is_visible()
+    assert page.locator('#device').count() == 0
     assert page.locator('#field-password').get_attribute('type') == 'password'
     page.locator('#submit').click()  # required fields, no request yet
     assert page.evaluate('window.closeAttempts || 0') == 0

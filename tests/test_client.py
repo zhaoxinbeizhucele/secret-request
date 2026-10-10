@@ -11,6 +11,28 @@ from secret_request.client import execute, run
 from .conftest import auth
 from .test_crypto import encrypt
 
+
+@pytest.mark.parametrize('health,exit_code,status', [
+    ({'status':'ok','access':'anonymous','version':'0.3.0'},0,'ready'),
+    ({'status':'ok','version':'0.2.0'},2,'incompatible_service'),
+])
+def test_check_service_requires_anonymous_access_without_creating_requests(tmp_path,monkeypatch,capsys,health,exit_code,status):
+    import httpx
+    from secret_request import client as module
+    config = tmp_path/'client.json'
+    config.write_text(json.dumps({'url':'https://relay.example','notifications':{'local':False}}))
+    calls = []
+    def handle(request):
+        calls.append((request.method,request.url.path))
+        assert 'authorization' not in request.headers
+        return httpx.Response(200,json=health)
+    actual_client = httpx.Client
+    monkeypatch.setattr(module.httpx,'Client',lambda **kwargs: actual_client(transport=httpx.MockTransport(handle),**kwargs))
+    monkeypatch.setattr(sys,'argv',['secret-request','--config',str(config),'--check-service'])
+    assert module.main() == exit_code
+    assert json.loads(capsys.readouterr().out)['status'] == status
+    assert calls == [('GET','/health')]
+
 @pytest.mark.parametrize("channel", ["env", "stdin"])
 def test_child_exact_value_and_no_output(tmp_path, capfd, channel):
     secret = " FAKE-测试🔒\nsecond line  "
@@ -33,7 +55,7 @@ def test_timeout_kills_child_tree(tmp_path):
         with pytest.raises(ProcessLookupError): os.kill(pid,0)
 
 def args(tmp_path, tokens, command):
-    config=tmp_path/"client.json"; config.write_text(json.dumps({"url":"http://testserver","request_token":tokens["agent"],"notifications":{"local":False}}))
+    config=tmp_path/"client.json"; config.write_text(json.dumps({"url":"http://testserver","notifications":{"local":False}}))
     return argparse.Namespace(config=config, allow_local_http=True, command=command, env="REQUEST_TEST_SECRET", name="fake", purpose="test", wait=10, execution_timeout=10)
 
 @pytest.mark.parametrize("session_ttl", [0, 30])

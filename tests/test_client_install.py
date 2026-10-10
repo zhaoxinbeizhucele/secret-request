@@ -1,4 +1,4 @@
-"""Device configuration import must remain private and never replace existing credentials."""
+"""First use needs a URL, not a pre-existing credential or configuration file."""
 import importlib.util
 import json
 import os
@@ -8,85 +8,119 @@ import sys
 
 import pytest
 
-
-BUNDLE = Path(__file__).resolve().parents[1]/'skills/secret-request'
-SCRIPTS = BUNDLE/'scripts'
+SCRIPTS = Path(__file__).resolve().parents[1]/'skills/secret-request/scripts'
 spec = importlib.util.spec_from_file_location('client_installer', SCRIPTS/'install.py')
 installer = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(installer)
 
 
-def configuration(token='FAKE-DEVICE-ONLY-'+'a'*32):
-    return {'url':'https://relay.example', 'request_token':token, 'notifications':{'local':False}}
+def configure(url, target, **options):
+    return installer.configure_client(url, target, sys.executable, SCRIPTS, **options)
 
 
-def write_config(path, value):
-    path.write_text(json.dumps(value), encoding='utf-8')
-    return path
-
-
-def test_import_and_repeat_preserve_exact_device_config(tmp_path):
-    source = write_config(tmp_path/'device.json', configuration())
+def test_new_user_initializes_with_only_url(tmp_path):
     target = tmp_path/'private configuration/client.json'
-    assert installer.install_configuration(source, target, sys.executable, SCRIPTS)
-    assert target.read_bytes() == source.read_bytes()
-    assert not installer.install_configuration(source, target, sys.executable, SCRIPTS)
+    assert configure('https://relay.example/', target)
+    assert json.loads(target.read_text()) == {'url':'https://relay.example','notifications':{'local':True}}
+    before = target.read_bytes()
+    assert not configure(None, target)
+    assert target.read_bytes() == before
     assert not list(target.parent.glob('.client-*'))
     if os.name != 'nt':
         assert target.stat().st_mode & 0o777 == 0o600
         assert target.parent.stat().st_mode & 0o777 == 0o700
 
 
-def test_import_never_overwrites_another_device(tmp_path):
-    source = write_config(tmp_path/'device.json', configuration())
-    target = write_config(tmp_path/'client.json', configuration('FAKE-EXISTING-'+'b'*32))
+def test_legacy_upgrade_preserves_notifications_and_removes_token(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv('TEST_SECRET_REQUEST_HOOK','https://notify.example/hook')
+    target = tmp_path/'client.json'
+    notifications = {'local':False,'webhook':{'type':'generic','url_env':'TEST_SECRET_REQUEST_HOOK'}}
+    target.write_text(json.dumps({'url':'https://relay.example','request_token':'FAKE-OLD-PRIVATE',
+                                 'notifications':notifications}))
+    assert configure(None, target)
+    assert json.loads(target.read_text()) == {'url':'https://relay.example','notifications':notifications}
+    assert capsys.readouterr() == ('','')
+
+
+def test_another_service_is_not_overwritten(tmp_path):
+    target = tmp_path/'client.json'
+    configure('https://first.example', target)
     before = target.read_bytes()
     with pytest.raises(ValueError, match='not overwritten'):
-        installer.install_configuration(source, target, sys.executable, SCRIPTS)
+        configure('https://other.example', target)
     assert target.read_bytes() == before
 
 
-@pytest.mark.parametrize('value', [
-    {'url':'http://relay.example','request_token':'FAKE-DEVICE-'+'a'*32},
-    {'url':'https://relay.example','request_token':'short'},
-    {'url':'https://relay.example','request_token':'FAKE-DEVICE-'+'a'*32,'reviewer_token':'FAKE-LEGACY'},
-    ['FAKE-PRIVATE-INPUT'],
-])
-def test_invalid_config_is_not_published_or_disclosed(tmp_path, value, capsys):
-    source = write_config(tmp_path/'device.json', value)
+@pytest.mark.parametrize('url',['http://relay.example','https://user:FAKE-PRIVATE@relay.example',
+                              'https://relay.example/path','https://relay.example/#FAKE-PRIVATE'])
+def test_invalid_url_not_saved_or_disclosed(tmp_path, url, capsys):
     target = tmp_path/'private/client.json'
-    with pytest.raises(ValueError, match='Invalid client configuration') as error:
-        installer.install_configuration(source, target, sys.executable, SCRIPTS)
+    with pytest.raises(ValueError, match='Invalid service URL') as error:
+        configure(url, target)
     assert 'FAKE' not in str(error.value)
     assert capsys.readouterr() == ('','')
     assert not target.exists()
     assert not list(target.parent.glob('.client-*'))
 
 
-def test_config_import_is_bounded(tmp_path):
-    source = tmp_path/'large.json'
-    source.write_bytes(b'a'*65537)
-    target = tmp_path/'private/client.json'
+def test_missing_url_reports_bootstrap_requirement(tmp_path):
+    with pytest.raises(ValueError, match='requires --url'):
+        configure(None, tmp_path/'client.json')
+    result = subprocess.run([sys.executable,'-I',str(SCRIPTS/'install.py'),
+                             '--config-directory',str(tmp_path/'config'),
+                             '--application-directory',str(tmp_path/'app')], capture_output=True)
+    assert result.returncode != 0 and b'requires --url' in result.stderr
+    assert not (tmp_path/'app').exists()
+
+
+def test_webhook_initialization_uses_existing_environment(tmp_path, monkeypatch):
+    monkeypatch.setenv('TEST_SECRET_REQUEST_HOOK','https://notify.example/hook?key=FAKE-PRIVATE')
+    target = tmp_path/'client.json'
+    configure('https://relay.example',target,local=False,webhook_type='generic',webhook_env='TEST_SECRET_REQUEST_HOOK')
+    assert json.loads(target.read_text())['notifications'] == {
+        'local':False,'webhook':{'type':'generic','url_env':'TEST_SECRET_REQUEST_HOOK'}}
+    assert 'FAKE-PRIVATE' not in target.read_text()
+
+
+def test_oversized_existing_config_is_preserved(tmp_path):
+    target = tmp_path/'client.json'
+    target.write_bytes(b'a'*65537)
     with pytest.raises(ValueError, match='64 KiB'):
-        installer.install_configuration(source, target, sys.executable, SCRIPTS)
-    assert not target.parent.exists()
+        configure('https://relay.example',target)
+    assert target.stat().st_size == 65537
 
 
-def test_concurrent_import_keeps_one_whole_configuration(tmp_path):
-    sources = [write_config(tmp_path/(str(index)+'.json'), configuration('FAKE-'+str(index)+'-'+'x'*32))
-               for index in range(2)]
-    target = tmp_path/'private/client.json'
-    target.parent.mkdir()
+def test_concurrent_initialization_keeps_one_whole_configuration(tmp_path):
+    target = tmp_path/'client.json'
     code = ('import importlib.util,sys; from pathlib import Path; '
             's=importlib.util.spec_from_file_location("installer",sys.argv[1]); '
             'm=importlib.util.module_from_spec(s); s.loader.exec_module(m); '
-            'm.install_configuration(Path(sys.argv[2]),Path(sys.argv[3]),sys.executable,Path(sys.argv[4]))')
+            'm.configure_client(sys.argv[2],Path(sys.argv[3]),sys.executable,Path(sys.argv[4]))')
+    urls = ['https://first.example','https://second.example']
     processes = [subprocess.Popen([sys.executable,'-I','-c',code,str(SCRIPTS/'install.py'),
-                                  str(source),str(target),str(SCRIPTS)],
-                                 stdout=subprocess.PIPE,stderr=subprocess.PIPE)
-                 for source in sources]
-    results = [process.communicate(timeout=30) for process in processes]
+                                  url,str(target),str(SCRIPTS)],stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+                 for url in urls]
+    for process in processes:
+        process.communicate(timeout=30)
     assert sorted(process.returncode for process in processes) == [0,1]
-    assert target.read_bytes() in [source.read_bytes() for source in sources]
-    assert all(b'FAKE-' not in output+errors for output, errors in results)
-    assert not list(target.parent.glob('.client-*'))
+    assert json.loads(target.read_text())['url'] in urls
+    assert not list(tmp_path.glob('.client-*'))
+
+
+def test_concurrent_updates_preserve_both_notification_choices(tmp_path, monkeypatch):
+    target = tmp_path/'client.json'
+    configure('https://relay.example',target)
+    monkeypatch.setenv('TEST_SECRET_REQUEST_HOOK','https://notify.example/hook')
+    code = ('import importlib.util,json,sys; from pathlib import Path; '
+            's=importlib.util.spec_from_file_location("installer",sys.argv[1]); '
+            'm=importlib.util.module_from_spec(s); s.loader.exec_module(m); '
+            'm.configure_client(None,Path(sys.argv[2]),sys.executable,Path(sys.argv[3]),**json.loads(sys.argv[4]))')
+    choices = [{'local':False},{'webhook_type':'generic','webhook_env':'TEST_SECRET_REQUEST_HOOK'}]
+    processes = [subprocess.Popen([sys.executable,'-I','-c',code,str(SCRIPTS/'install.py'),
+                                  str(target),str(SCRIPTS),json.dumps(choice)],
+                                 stdout=subprocess.PIPE,stderr=subprocess.PIPE) for choice in choices]
+    for process in processes:
+        process.communicate(timeout=30)
+    assert [process.returncode for process in processes] == [0,0]
+    assert json.loads(target.read_text())['notifications'] == {
+        'local':False,'webhook':{'type':'generic','url_env':'TEST_SECRET_REQUEST_HOOK'}}
