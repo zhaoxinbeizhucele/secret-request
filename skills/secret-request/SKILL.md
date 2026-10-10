@@ -43,6 +43,10 @@ Windows 入口为 `%LOCALAPPDATA%\Programs\SecretRequest\secret-request.cmd`；m
 
 解密后默认建立本机内存会话，输出 session_ready 及句柄，然后执行程序。程序输出被抑制；需要业务结果时，让程序单独保存必要的非敏感结果。提交和领取成功不等于业务成功。
 
+`completed` 仅表示程序执行结束，必须同时检查 `exit_code` 和本次非敏感业务结果；非零退出码不能报告成功。程序失败后，核对是否已有部分业务操作，再修正程序并复用仍有效的会话，不必重新申请机密。外层命令退出码可能与程序退出码重合，不能仅凭数字判断失败原因。
+
+遇到 `failed`、`execution_failed`、`execution_timeout`、`result_unknown` 或输出中断时，按 [失败排查与结果判断](references/troubleshooting.md) 检查最后状态、已有会话和业务结果，再决定是否重试。通用 `failed` 本身不能定位原因，也不代表程序一定没有执行。
+
 ## 复用与清理
 
 ```text
