@@ -42,6 +42,17 @@ def main():
             session_ttl=300,agent_name='Codex · 自动验收',fields_file=fields,show_link=False)
         def submit(created):
             rid, token = created['id'], created['input_url'].split('#')[1]
+            # Check the deployed page and every static dependency as well as the
+            # API: a healthy relay can still have unreadable packaged web files.
+            for path, content_type in (
+                ('/input/' + rid, 'text/html'),
+                ('/assets/app.js', 'javascript'),
+                ('/assets/crypto.js', 'javascript'),
+                ('/assets/style.css', 'text/css'),
+            ):
+                resource = http.get(config['url'] + path)
+                resource.raise_for_status()
+                assert content_type in resource.headers['content-type'] and resource.content
             headers = {'Authorization':'Bearer '+token}
             details = http.get(config['url']+'/api/requests/'+rid,headers=headers)
             details.raise_for_status()
@@ -64,7 +75,7 @@ def main():
             assert state['idle_timeout_seconds'] == 300 and state['last_result']['exit_code'] == 0
             assert request(handle,'revoke')['status']=='revoked'
             assert request(handle,'status')['status']=='session_unavailable'
-            print(json.dumps({'success':True,'multi_field_decrypt_and_execution':True,
+            print(json.dumps({'success':True,'input_page_and_assets':True,'multi_field_decrypt_and_execution':True,
                 'idle_timeout_seconds':300,'revoke_and_process_exit':True,
                 'notifications':events[0]['notifications']},ensure_ascii=False))
         finally:

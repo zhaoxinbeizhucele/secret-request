@@ -3,6 +3,9 @@ WORKDIR /app
 COPY requirements.txt constraints.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 COPY secret_request ./secret_request
+# Source archives may have been extracted with a private umask. The unprivileged
+# server must be able to traverse package directories and serve static files.
+RUN chmod -R a+rX /app/secret_request
 USER 10001:10001
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 SECRET_REQUEST_CONFIG=/run/config/relay.json
 EXPOSE 8787
