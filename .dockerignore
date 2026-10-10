@@ -1,0 +1,14 @@
+.venv
+tests
+windows
+macos
+secret_request/native
+runtime
+artifacts
+skills
+__pycache__
+.pytest_cache
+*.egg-info
+.git
+*.tar.gz
+scripts

@@ -1,0 +1,10 @@
+httpx==0.28.1
+cryptography==46.0.3
+anyio==4.12.1
+idna==3.10
+typing-extensions==4.15.0
+httpcore==1.0.9
+h11==0.16.0
+certifi==2025.6.15
+cffi==2.0.0
+pycparser==2.23
