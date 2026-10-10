@@ -60,6 +60,8 @@ python3 -I '<skill目录>/scripts/install.py' --url 'https://your-relay.example'
 
 更新 skill 用 `npx skills update`，然后运行其安装器更新依赖和入口，服务地址与通知设置继续沿用。用户自行打包后也可解压 `artifacts/secret-request-client.zip` 安装；分发包不包含用户配置。当前 Windows 组件使解压体积超过 Skills CLI 的直接下载默认上限，`npx skills` 分发采用 Git 或本地目录来源。
 
+本项目安装器不修改全局 `AGENTS.md`、`CLAUDE.md` 或其他 Agent 指令。技能的触发描述要求 Agent 在已授权任务确实缺少机密时主动发起网页申请，无需用户点名；已有可用认证或有效会话则优先复用。新安装或更新后需让宿主重新加载技能（通常开启新会话）。主动选择仍取决于宿主的技能发现与调用能力，不是安装后拦截所有认证请求的后台功能。
+
 GitHub 提供客户端和服务端源码，不预设一个面向公众开放的官方服务。服务地址由部署者提供；私网服务仍需处于对应网络才能连接。
 
 开发者可运行 `python scripts/build_native.py` 构建当前系统组件；Windows 构建需要 .NET 10 SDK。通知组件没有菜单、托盘或开机启动项，Windows 发送后退出；macOS 等待本条通知点击或到期，申请结束时客户端会回收它。
