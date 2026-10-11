@@ -2,6 +2,8 @@
 
 基线核对：2026-10-10，当前 HEAD 仍为 `d1f1ef4b5fdb6d648390c3ee53f5cd9aa24e6aad`，与 release-readiness 报告一致。原仓库未跟踪的调查材料保留；本轮使用 `fix/interrupt-results` 独立 worktree。
 
+后续状态：2026-10-11 已按用户新指令提交、合并、推送并发布既有 Debian 服务，见 [发布记录](deployment-2026-10-11.md)。以下“未提交/部署”的表述记录的是 10 月 10 日本轮实施结束时的状态；现有客户端安装仍未升级。
+
 ## 状态约定
 
 - 执行与会话分开表达：终态事件的 `execution` 记录本次 `execution_id` 和真实执行状态；`session_state` 表示 active、revoked、revoking、unavailable、unknown 或 not_created。

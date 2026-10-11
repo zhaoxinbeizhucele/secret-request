@@ -1,0 +1,24 @@
+{
+  "status": "deployed",
+  "commit": "1cf92ce8026de34451f6147df2323eec585aa723",
+  "archive_sha256": "4cf8c9f8a96fe1475b14281238ad5b881449a766e86b3a751abf52d5d00a7449",
+  "previous_image": "sha256:ac628fe1933f7366827877afe23b801173e9e2681bc3449d83e644fe6deb254a",
+  "previous_container": "dc988885f69cdea59116a9d0a6dbdd6cb79a1b83da690c44c2b955c515ccf10b",
+  "candidate_image": "sha256:ae0ce93be860e5c69abae9a80d6b455b14f39ce032ced0f313c02d2c7f457ecf",
+  "container": "5bae34269dba6a78a4a3c3f8a5414b0b0c30ffebb148925747cf1b48443afcc7",
+  "started_at": "2026-10-11T09:00:59.238321561Z",
+  "rollback_image": "local/secret-request:rollback-20261011-1cf92ce",
+  "backup": "/home/docker/secret-request-releases/20261011-1cf92ce/previous-source.tar.gz",
+  "other_containers_unchanged": true,
+  "health": true,
+  "offline_nonroot_page_assets": true,
+  "https_smoke_pending": false,
+  "recorded_at": "2026-10-11T09:01:00.524202+00:00",
+  "https_page_assets_multifield_execution_revoke": true,
+  "verified_at": "2026-10-11T09:02:13.157148+00:00",
+  "image_revision_verified": true,
+  "changed_content_files": [
+    "secret_request/client.py",
+    "secret_request/session.py"
+  ]
+}
