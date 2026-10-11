@@ -47,11 +47,14 @@ Windows 入口为 `%LOCALAPPDATA%\Programs\SecretRequest\secret-request.cmd`；m
 
 遇到 `failed`、`execution_failed`、`execution_timeout`、`result_unknown` 或输出中断时，按 [失败排查与结果判断](references/troubleshooting.md) 检查最后状态、已有会话和业务结果，再决定是否重试。通用 `failed` 本身不能定位原因，也不代表程序一定没有执行。
 
+主动 Ctrl+C 请求停止本次执行并撤销本次使用的会话，不影响其他会话。执行结果 `execution` 与 `session_state` 分开判断：已结束的程序保留真实结果，即使会话随后撤销；`execution.status=cancelled` 只表示确认中止，已发生的业务副作用未回滚。等待输入或交接期间中断可为 `not_started`。未确认时为 unknown，使用输出的 `recovery.query_args` / `revoke_args` 查询或撤销，不重发执行。
+
 ## 复用与清理
 
 ```text
 secret-request --use-session <handle> -- python query.py
 secret-request --session-status <handle>
+secret-request --session-status <handle> --execution-id <本次execution_id>
 secret-request --revoke-session <handle>
 ```
 
@@ -61,6 +64,8 @@ secret-request --revoke-session <handle>
 
 任务完成或放弃后主动撤销。revoking 表示仍在清理，不能报告已经结束；revoked 表示已停止。空闲过期、撤销或后台退出后句柄失效，机密不能恢复。最多 16 个本机复用后台，每个会话最多 256 次执行，达到上限时停止并检查申请或重试逻辑。
 
-断线出现 result_unknown 时，结合 execution_requested 中的 ID、会话状态和业务结果判断；不自动重跑可能已执行的写操作。句柄具有使用权限，不保存到仓库、长期笔记或分享给其他任务。
+非主动断线不自动撤销或重跑。按 execution_requested 的 ID 查询指定执行，不把 last_result 中其他 ID 的结果当成本次结果。带 ID 的主动撤销后，机密不能复用；后台最多保留 60 秒无机密结果回执，供丢响应后的查询/撤销确认。回执到期或进程退出后只能核对业务证据。句柄及 recovery 参数具有使用权限，不保存到仓库、长期笔记或分享给其他任务。
 
 本工具避免正常流程让机密进入模型上下文，不隔离有本机完整权限的恶意程序。程序只能将机密用于原任务授权的目标，不打印、保存或通过日志、结果、命令参数回传机密。撤销是解除内存引用，不能承诺擦除所有系统内存副本。
+
+POSIX 只清理受控进程组，主动脱离该组的后代不在此保证内；Windows 使用 Job Object。两者均不能描述成任意消费者或后代无法逃逸的安全隔离。

@@ -13,6 +13,9 @@
 | `execution_failed` / `execution_timeout` | 检查程序路径、依赖、工作目录、超时及业务结果；可能已经产生部分写入，不自动重复执行 |
 | `failed` 或输出意外中断 | 原因未定位；结合先前事件、会话状态和业务结果排查，不能认定为密码错误或任务未执行 |
 | `declined` / `cancelled` / `expired` | 停止此次申请，不自动循环通知用户 |
+| `interrupted` / `execution.status=not_started` | 主动中断发生在执行前；分别核对会话是否 not_created 或 revoked |
+| `execution.status=cancelled` | 后台已确认本次执行中止；副作用未回滚，不能据此直接重复写操作 |
+| `result_unknown` / `execution.status=unknown` | 使用 recovery 参数或同一 execution_id 查询/撤销；不推断已停止 |
 
 先看结构化 `status`，再看结果中的 `exit_code`。程序本身也可能返回 1、2、3 等退出码，与客户端的失败、未完成、超时退出码重合；外层退出码只作辅助，不能单独分类。没有输出 `completed` 时，不要编造程序退出码。
 
@@ -20,12 +23,17 @@
 
 ```text
 secret-request --session-status <handle>
+secret-request --session-status <handle> --execution-id <本次execution_id>
+secret-request --revoke-session <handle> --execution-id <本次execution_id>
 ```
 
-查看 `status`、`running`、`last_result` 和 `remaining_seconds`：
+查看 `session_state` 和指定 ID 的 `execution`；没有指定 ID 时仍可查看 `status`、`running`、`last_result` 和 `remaining_seconds`：
 
 - `active` 只表示会话可用。`running` 非空时仍有程序在执行，继续等待，不并发重跑。
 - `last_result` 是最近一次结果，可能为空或属于此前执行。将它的 `execution_id` 与本次 `execution_requested.execution_id` 对上，才能用其中的状态和退出码判断本次执行；不要把旧的成功结果当成新结果。
+- 指定 ID 时以 `execution` 为准：completed 保留退出码；running 尚在执行；not_started 表示查询当时该 ID 尚未被接受。断线后若会话仍 active，原请求可能随后被接受，不能据此重跑；明确拒绝或撤销确认后才能认定不会执行。unknown 不能推断结果。执行查询、重复撤销不会续期。
+- 主动 Ctrl+C 会请求撤销本次使用的会话，重复 Ctrl+C 不打断必要清理。已确认 completed 的任务不会因此改报 cancelled；`session_state=revoked` 与执行成功/失败是两个事实。已确认中止不表示回滚副作用。
+- 撤销返回 revoking 或 unknown 时，使用输出 recovery 的参数数组调用当前客户端入口。带 ID 撤销后最多 60 秒可查询无机密回执，期间会话不能复用；进程退出/到期无法恢复结果，需核对业务证据。不能把 unreachable/unavailable 当成已确认中止。
 - `result_unknown`、连接中断或超时后，结合上述状态及本次业务结果确认是否已执行。结果不明确时，尤其是写操作，停止依赖该结果的操作并说明不确定性，不自动重试。
 - 已确认程序失败且可以安全重试时，修正程序并用 `--use-session <handle> -- <程序及参数>` 复用机密；原工作目录和 stdin/env 交付方式不变。不要仅为了续期而循环执行命令，状态查询不会续期。
 - `session_unavailable` 表示已不能使用该会话；`invalid_session` / `unauthorized` 时先核对是否误用了句柄，不输出句柄内容。失效或一次性使用的机密无法恢复；任务仍需继续且允许再次申请时才发起新申请。

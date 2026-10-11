@@ -113,10 +113,15 @@ secret-request --agent-name Codex --name "测试库登录" --purpose "查询已�
 ```sh
 secret-request --use-session '<handle>' -- python query.py
 secret-request --session-status '<handle>'
+secret-request --session-status '<handle>' --execution-id '<本次execution_id>'
 secret-request --revoke-session '<handle>'
 ```
 
 会话默认空闲 5 分钟过期，`--session-ttl` 可设 10–1800 秒。合法执行运行中不因空闲过期，执行结束后重新计时；状态查询、无效、重复、busy 调用不续期。运行中 status 的 expires_at 和 remaining_seconds 为 null。首次工作目录、输入方式固定，最多一次并发执行；复用不再发送通知或申请。任务完成后应主动撤销。`--one-shot` 不创建复用后台。
+
+主动 Ctrl+C 请求停止本次执行并撤销本次使用的会话，其他会话不受影响。事件中的 `execution` 表达真实执行结果，`session_state` 表达会话状态；任务已完成时保留原退出码，不因随后中断改报取消。确认中止只表示执行停止，已发生的副作用未回滚。未知状态提供同一句柄/执行 ID 的查询、撤销参数，不自动重跑。非主动断线保留原恢复能力；指定 ID 查询不会用上次结果替代本次结果。带 ID 的撤销最多保留 60 秒无机密结果回执，机密已不可复用；回执到期/后台退出后不能恢复执行结果。
+
+POSIX 清理范围是受控进程组，脱离该组的后代不在保证内；Windows 使用 Job Object。它们不构成任意任务程序的安全隔离。
 
 每个用户最多 16 个机密会话后台，用操作系统锁限制，无凭据或句柄文件。每个会话最多 256 次执行。随机句柄有使用权限，不能分享；固定目录不是沙箱。断线后先核对执行 ID 和业务结果，不自动重复未知结果的写操作。重启电脑或会话后台退出后机密无法恢复。
 

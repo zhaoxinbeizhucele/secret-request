@@ -18,6 +18,7 @@ from .client import ExecutionCancelled, execute
 MAX_MESSAGE = 512 * 1024  # Room for JSON escaping a 64 KiB credential.
 MAX_EXECUTIONS = 256
 MAX_SESSIONS = 16
+RECEIPT_SECONDS = 60  # Metadata only, after an ID-specific revocation.
 
 
 def read_message(stream):
@@ -67,6 +68,8 @@ class Session:
         self.running = None
         self.last_result = None
         self.seen = set()
+        self.results = {}
+        self.receipt_deadline = None
 
     def refresh_idle(self):
         self.deadline = time.monotonic() + self.ttl
@@ -83,6 +86,19 @@ class Session:
         with self.lock:
             return not self.expire_idle()
 
+    def serving(self):
+        with self.lock:
+            return (not self.expire_idle() or not self.idle.is_set() or
+                    (self.receipt_deadline is not None and time.monotonic() < self.receipt_deadline))
+
+    def execution(self, execution_id):
+        # Caller holds self.lock. Never substitute last_result for another ID.
+        if execution_id in self.results:
+            return self.results[execution_id].copy()
+        return {"execution_id": execution_id,
+                "status": "running" if self.running == execution_id else
+                          "unknown" if execution_id in self.seen else "not_started"}
+
     def close(self):
         with self.lock:
             self.secret = None
@@ -93,18 +109,38 @@ class Session:
         if not isinstance(token, str) or not hmac.compare_digest(token, self.token):
             return {"status": "unauthorized"}
         action = message.get("action")
+        execution_id = message.get("execution_id")
+        if action in {"status", "revoke"} and execution_id is not None and (
+                not isinstance(execution_id, str) or not re.fullmatch(r"[a-f0-9]{32}", execution_id)):
+            return {"status": "invalid_request"}
         if action == "revoke":
+            if execution_id is not None:
+                with self.lock:
+                    # Repeated queries/revokes never extend the receipt window.
+                    if self.receipt_deadline is None:
+                        self.receipt_deadline = time.monotonic() + RECEIPT_SECONDS
             self.close()
             self.idle.wait(10)
-            return {"status": "revoked" if self.idle.is_set() else "revoking"}
+            with self.lock:
+                result = {"status": "revoked" if self.idle.is_set() else "revoking"}
+                if execution_id is not None:
+                    result.update(session_state=result["status"], execution=self.execution(execution_id))
+                return result
         with self.lock:
             if self.expire_idle():
+                if action == "status" and execution_id is not None:
+                    return {"status": "session_unavailable",
+                            "session_state": "revoked" if self.idle.is_set() else "revoking",
+                            "execution": self.execution(execution_id)}
                 return {"status": "session_unavailable"}
             if action == "status":
-                return {"status": "active", "idle_timeout_seconds": self.ttl,
+                result = {"status": "active", "idle_timeout_seconds": self.ttl,
                         "remaining_seconds": None if self.running else max(0, int(self.deadline - time.monotonic())),
                         "expires_at": None if self.running else self.expires_at, "running": self.running,
                         "last_result": self.last_result}
+                if execution_id is not None:
+                    result.update(session_state="active", execution=self.execution(execution_id))
+                return result
             if action != "run":
                 return {"status": "invalid_request"}
             command, timeout, execution_id = (message.get(k) for k in ("command", "timeout", "execution_id"))
@@ -140,6 +176,7 @@ class Session:
             with self.lock:
                 self.running = None
                 self.last_result = result.copy()
+                self.results[execution_id] = result.copy()
                 if not self.stopped.is_set():
                     self.refresh_idle()
                 self.idle.set()
@@ -215,14 +252,15 @@ class SessionSlot:
                 self.file.seek(0)
                 msvcrt.locking(self.file.fileno(), msvcrt.LK_UNLCK, 1)
             self.file.close()
+            self.file = None
 
 
 def serve(bootstrap):
-    with SessionSlot():
-        serve_session(bootstrap)
+    with SessionSlot() as slot:
+        serve_session(bootstrap, slot)
 
 
-def serve_session(bootstrap):
+def serve_session(bootstrap, slot=None):
     session = Session(**bootstrap)
     bootstrap.clear()
     try:
@@ -233,8 +271,11 @@ def serve_session(bootstrap):
                 "session": f"sr1.{server.server_address[1]}.{session.token}",
                 "expires_at": session.expires_at, "idle_timeout_seconds": session.ttl})
             sys.stdout.close()
-            while session.available():
+            while session.serving():
                 server.handle_request()
+                if slot is not None and session.stopped.is_set() and session.idle.is_set():
+                    # Receipt-only brokers retain no secret and use no secret slot.
+                    slot.__exit__()
             session.close()
     finally:
         session.close()

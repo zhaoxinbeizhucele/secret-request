@@ -1,0 +1,39 @@
+............................................F........................... [ 47%]
+........................................................................ [ 94%]
+........                                                                 [100%]
+=================================== FAILURES ===================================
+_______ test_archive_has_readable_files_and_explicit_traversable_parents _______
+
+tmp_path = PosixPath('/tmp/secret-request-stage-a-linux-f8hq042o/pytest/test_archive_has_readable_file0')
+
+    def test_archive_has_readable_files_and_explicit_traversable_parents(tmp_path):
+        root = Path(__file__).resolve().parents[1]
+        output = tmp_path / "server.tar.gz"
+        package(root, output)
+        with tarfile.open(output) as archive:
+            members = {member.name: member for member in archive.getmembers()}
+            assert "secret_request/web/index.html" in members
+            assert not any("native" in Path(name).parts or "__pycache__" in Path(name).parts
+                           for name in members)
+            for name, member in members.items():
+                assert member.mode == (0o755 if member.isdir() else 0o644)
+                for parent in Path(name).parents:
+                    if parent != Path("."):
+                        assert members[parent.as_posix()].isdir()
+            if os.name != "nt":
+                destination = tmp_path / "extracted"
+                previous = os.umask(0o077)
+                try:
+                    archive.extractall(destination, filter="data")
+                finally:
+                    os.umask(previous)
+                for name, member in members.items():
+                    mode = stat.S_IMODE((destination / name).stat().st_mode)
+>                   assert mode & 0o005 == (0o005 if member.isdir() else 0o004)
+E                   assert (448 & 5) == 5
+
+tests/test_deploy_package.py:33: AssertionError
+--- generated xml file: /tmp/secret-request-stage-a-linux-f8hq042o/tests.xml ---
+=========================== short test summary info ============================
+FAILED tests/test_deploy_package.py::test_archive_has_readable_files_and_explicit_traversable_parents
+1 failed, 151 passed in 45.22s

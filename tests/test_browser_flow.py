@@ -70,7 +70,7 @@ def test_multi_fields_fallback_and_layout(browser_system):
     page.get_by_role('button', name='显示密码', exact=True).click()
     assert page.locator('#field-password').get_attribute('type') == 'text'
     page.get_by_role('button', name='隐藏密码', exact=True).click()
-    artifacts = ROOT / 'artifacts/mvp'; artifacts.mkdir(exist_ok=True)
+    artifacts = ROOT / 'artifacts/mvp'; artifacts.mkdir(parents=True, exist_ok=True)
     page.screenshot(path=str(artifacts/'form-desktop.png'), full_page=True)
     page.set_viewport_size({'width': 390, 'height': 844})
     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
