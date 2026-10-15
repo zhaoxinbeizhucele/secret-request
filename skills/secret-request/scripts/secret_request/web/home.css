@@ -1,10 +1,10 @@
 /* Secret Request · homepage. Dark-first, hairline borders, one indigo accent. System fonts only (CSP: style-src 'self'). */
 :root{color-scheme:dark light;
-  --bg:#08090a;--bg-2:#0e0f11;--panel:#121316;--text:#f7f8f8;--muted:#8a8f98;--faint:#5c616b;--line:rgba(255,255,255,.08);--line-2:rgba(255,255,255,.14);
+  --bg:#08090a;--bg-2:#0e0f11;--panel:#121316;--text:#f7f8f8;--muted:#8a8f98;--faint:#80858f;--line:rgba(255,255,255,.08);--line-2:rgba(255,255,255,.14);
   --accent:#8b8cf8;--accent-ink:#0b0b1a;--btn:#f7f8f8;--btn-ink:#08090a;--glow:rgba(110,110,240,.16);--code:#d0d6e0;
   --sans:Inter,"SF Pro Text",system-ui,-apple-system,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
   --mono:"SF Mono",ui-monospace,"JetBrains Mono",Menlo,Consolas,"Noto Sans Mono CJK SC",monospace}
-@media(prefers-color-scheme:light){:root{--bg:#ffffff;--bg-2:#f7f7f8;--panel:#ffffff;--text:#16161a;--muted:#6b6f7a;--faint:#9a9ea8;--line:rgba(15,15,25,.08);--line-2:rgba(15,15,25,.14);
+@media(prefers-color-scheme:light){:root{--bg:#ffffff;--bg-2:#f7f7f8;--panel:#ffffff;--text:#16161a;--muted:#6b6f7a;--faint:#6b6f7a;--line:rgba(15,15,25,.08);--line-2:rgba(15,15,25,.14);
   --accent:#5b5bd6;--accent-ink:#fff;--btn:#16161a;--btn-ink:#fff;--glow:rgba(91,91,214,.10);--code:#2b2d33}}
 *{box-sizing:border-box;scrollbar-color:var(--line-2) var(--bg)}
 html{scroll-behavior:smooth;scroll-padding-top:80px}

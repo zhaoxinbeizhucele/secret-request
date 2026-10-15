@@ -1,12 +1,12 @@
 /* Input card · centered auth-style card. Cool neutrals, hairline border, soft layered shadow, indigo accent. System fonts only (CSP: style-src 'self'). */
 :root{color-scheme:light dark;
-  --bg:#f6f6f8;--card:#fff;--inset:#f8f8fa;--text:#16161a;--muted:#696d78;--faint:#9a9ea8;--line:rgba(15,15,25,.09);--line-2:rgba(15,15,25,.15);--field:#fff;
+  --bg:#f6f6f8;--card:#fff;--inset:#f8f8fa;--text:#16161a;--muted:#696d78;--faint:#6b6f7a;--line:rgba(15,15,25,.09);--line-2:rgba(15,15,25,.15);--field:#fff;
   --accent:#5b5bd6;--accent-2:#4f4fc8;--on-accent:#fff;--ring:rgba(91,91,214,.28);--error:#c4302b;--error-bg:#fdf1f0;--error-line:rgba(196,48,43,.25);
   --shadow:0 0 0 1px rgba(15,15,25,.06),0 1px 1px rgba(15,15,25,.03),0 4px 8px -2px rgba(15,15,25,.05),0 24px 48px -16px rgba(15,15,25,.12);
   --field-shadow:0 1px 2px rgba(15,15,25,.05);
   --sans:Inter,"SF Pro Text",system-ui,-apple-system,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
   --mono:"SF Mono",ui-monospace,"JetBrains Mono",Menlo,Consolas,"Noto Sans Mono CJK SC",monospace}
-@media(prefers-color-scheme:dark){:root{--bg:#08090a;--card:#111214;--inset:#0b0c0e;--text:#f4f5f7;--muted:#8d929c;--faint:#5f646e;--line:rgba(255,255,255,.08);--line-2:rgba(255,255,255,.13);--field:#0b0c0e;
+@media(prefers-color-scheme:dark){:root{--bg:#08090a;--card:#111214;--inset:#0b0c0e;--text:#f4f5f7;--muted:#8d929c;--faint:#80858f;--line:rgba(255,255,255,.08);--line-2:rgba(255,255,255,.13);--field:#0b0c0e;
   --accent:#8b8cf8;--accent-2:#7b7cf0;--on-accent:#0b0b1a;--ring:rgba(139,140,248,.32);--error:#ff8a80;--error-bg:rgba(255,99,88,.08);--error-line:rgba(255,138,128,.28);
   --shadow:0 0 0 1px rgba(255,255,255,.08),0 1px 0 rgba(255,255,255,.06) inset,0 20px 40px -20px rgba(0,0,0,.8);
   --field-shadow:none}}
@@ -38,7 +38,7 @@ input:not([type=checkbox]):focus,textarea:focus{outline:0;border-color:var(--acc
 textarea{resize:vertical;min-height:120px;font-family:var(--mono);font-size:13.5px}
 .check{display:flex;align-items:center;gap:8px;margin:12px 0 6px;font-weight:400;color:var(--muted)}
 input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:var(--accent)}
-button{font:600 14.5px/1.2 var(--sans);letter-spacing:-.005em;cursor:pointer;border:0;border-radius:8px;padding:11px 16px;min-height:44px;color:var(--on-accent);background:linear-gradient(180deg,color-mix(in srgb,var(--accent) 88%,#fff),var(--accent));box-shadow:0 0 0 1px var(--accent-2),0 1px 0 rgba(255,255,255,.18) inset,0 1px 2px rgba(15,15,25,.15);transition:filter .15s,box-shadow .15s}
+button{font:600 14.5px/1.2 var(--sans);letter-spacing:-.005em;cursor:pointer;border:0;border-radius:8px;padding:11px 16px;min-height:44px;color:var(--on-accent);background:linear-gradient(180deg,var(--accent),var(--accent-2));box-shadow:0 0 0 1px var(--accent-2),0 1px 0 rgba(255,255,255,.18) inset,0 1px 2px rgba(15,15,25,.15);transition:filter .15s,box-shadow .15s}
 button:hover{filter:brightness(1.06)}
 button:disabled{opacity:.55;cursor:wait;filter:none}
 .quiet{position:absolute;right:5px;top:50%;transform:translateY(-50%);min-height:30px;padding:4px 10px;background:transparent;color:var(--muted);box-shadow:none;font-weight:500;font-size:12.5px;border-radius:6px;white-space:nowrap}
