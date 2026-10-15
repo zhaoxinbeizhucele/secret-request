@@ -10,7 +10,7 @@
 - 本机：`--mode local --port 8787`，无需 Docker、域名或部署，只能本机浏览器填写。
 - 自建 HTTPS：`--mode custom --url https://relay.example.com`；部署方法见仓库 README 的“部署中转服务”。
 
-默认只要求企微 webhook，本机通知关闭。复用已有的 `SECRET_REQUEST_WEBHOOK` 或用 `--webhook-env NAME` 指定其他变量名。没有可用 webhook 时，在安装命令增加 `--configure-wecom`。它使用选定的中转打开一次性加密填写页，地址只通过 stdin 交给本机配置程序并保存在受保护配置中；本机模式会临时拉起仅 loopback 的配置页，无需事先启动服务器。没有浏览器时直接用独立运行环境的 Python 执行 `scripts/setup_wecom.py --config <client.json> --no-open`，把填写链接提供给用户（本机链接仅同电脑可用）。此入口专用于首次配置，无需先有可用通知渠道。拒绝/过期不覆盖原配置；保存不发送群消息。不要让用户在聊天发送完整地址，也不要要求用户回聊天说填完了，继续跟踪同一工具会话，直到 wecom_configured 或明确失败。环境变量方式只写入变量名，客户端每次运行均需能读到该变量。
+本机通知默认开启，配置企微 webhook 后同时发送两个渠道；配置一个渠道不会关闭另一个。用户显式关闭的选择在后续配置和更新时保留。复用已有的 `SECRET_REQUEST_WEBHOOK` 或用 `--webhook-env NAME` 指定其他变量名。没有可用 webhook 时，在安装命令增加 `--configure-wecom`。它使用选定的中转打开一次性加密填写页，地址只通过 stdin 交给本机配置程序并保存在受保护配置中；本机模式会临时拉起仅 loopback 的配置页，无需事先启动服务器。没有浏览器时直接用独立运行环境的 Python 执行 `scripts/setup_wecom.py --config <client.json> --no-open`，把填写链接提供给用户（本机链接仅同电脑可用）。此入口专用于首次配置，无需先有可用通知渠道。拒绝/过期不覆盖原配置；保存不发送群消息。不要让用户在聊天发送完整地址，也不要要求用户回聊天说填完了，继续跟踪同一工具会话，直到 wecom_configured 或明确失败。环境变量方式只写入变量名，客户端每次运行均需能读到该变量。
 
 Windows：
 
@@ -40,6 +40,6 @@ python3 -I '<skill目录>/scripts/install.py' --mode public --configure-wecom
 
 `npx skills update` 后运行安装器更新环境/入口。省略模式与 URL 时保留原配置；显式指定另一服务会报错并保留旧配置。要并行使用另一模式，指定独立的 `--application-directory` 和 `--config-directory`，不要覆盖已有任务的配置。
 
-`--local-notification` 可选择启用现有 Windows/macOS 通知；macOS 需要 --build-notifier 和 Apple Command Line Tools。当前主流程不依赖原生组件。旧通知配置会保留。0.2 的 request_token 会在升级时移除。
+`--no-local-notification` 可显式关闭 Windows/macOS 本机通知，`--local-notification` 可重新开启；这两个选项均不修改已配置的 webhook。macOS 需要 --build-notifier 和 Apple Command Line Tools。Linux 本机通知返回 unsupported，使用已配置的 webhook。旧通知配置会保留。0.2 的 request_token 会在升级时移除。
 
 skill 路径变化或被删除会使命令入口失效，重新运行当前 skill 的安装器。安装服务仅适用于当前使用端；不要为了修复本机配置而重启已有中转服务。

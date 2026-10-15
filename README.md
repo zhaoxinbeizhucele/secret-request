@@ -42,9 +42,9 @@ python3 -I '<skill目录>/scripts/install.py' --mode public --configure-wecom
 ~/.local/share/secret-request/secret-request --check-service
 ```
 
-企微为优先通知方式，本机通知默认关闭。`--configure-wecom` 不依赖已有通知渠道：公共/自建模式使用当前选中的中转并打开一次性填写页，本机模式临时启动 loopback 配置页。提交后地址保存到受保护的本机配置；拒绝或过期保留原配置，不发送群消息。没有桌面浏览器时可直接运行 `scripts/setup_wecom.py --config <client.json> --no-open` 获得填写链接；loopback 链接仍仅限同电脑。填写后通过原工具进程状态确认 `wecom_configured`，不要要求用户回聊天确认。已有 `SECRET_REQUEST_WEBHOOK` 时，新安装自动引用；也可用 `--webhook-env` 指定其他变量名。变量需在客户端进程环境中可用。仅将变量名写入配置，完整 webhook 不进入日志或仓库。旧版已保存的通知设置继续沿用。
+本机通知默认开启，配置企微后同时发送本机通知和企微 webhook；配置一个渠道不会关闭另一个。`--configure-wecom` 不依赖已有通知渠道：公共/自建模式使用当前选中的中转并打开一次性填写页，本机模式临时启动 loopback 配置页。提交后地址保存到受保护的本机配置；拒绝或过期保留原配置，不发送群消息。没有桌面浏览器时可直接运行 `scripts/setup_wecom.py --config <client.json> --no-open` 获得填写链接；loopback 链接仍仅限同电脑。填写后通过原工具进程状态确认 `wecom_configured`，不要要求用户回聊天确认。已有 `SECRET_REQUEST_WEBHOOK` 时，新安装自动引用；也可用 `--webhook-env` 指定其他变量名。变量需在客户端进程环境中可用。仅将变量名写入配置，完整 webhook 不进入日志或仓库。旧版已保存的通知设置继续沿用。
 
-Windows/macOS 本机通知仍可通过 `--local-notification` 显式开启；macOS 需 Apple Command Line Tools 和 `--build-notifier`。Linux 使用 webhook。通用 JSON webhook 保留兼容，当前主流程只要求企微。
+Windows/macOS 可通过 `--no-local-notification` 显式关闭本机通知，或通过 `--local-notification` 重新开启；已配置的 webhook 不受影响，后续更新和配置企微均保留已有选择。macOS 需 Apple Command Line Tools 和 `--build-notifier`。Linux 本机通知返回 unsupported，使用已配置的 webhook。通用 JSON webhook 保留兼容，当前主流程只要求企微。
 
 ### 本机快速启动
 

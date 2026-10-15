@@ -33,7 +33,7 @@ Windows 入口为 `%LOCALAPPDATA%\Programs\SecretRequest\secret-request.cmd`；m
 
 支持 text、password、textarea、email、url，1–16 个字段，required 默认 true。默认交给程序 stdin，读取到 EOF，不追加换行；Python 用 `sys.stdin.buffer.read().decode('utf-8')`，多字段再用 `json.loads`。`--env NAME` 则把整份内容放进该子进程的一个环境变量。
 
-客户端创建申请后，自行发送配置的本机通知和 webhook；只等待这条申请。通知失败会报告渠道状态，不重新创建申请；仅在用户要求备用入口时使用 `--show-link`。链接持有者可以填写或拒绝，勿随意转发。
+客户端创建申请后，自行发送配置的本机通知和 webhook；只等待这条申请。本机通知默认开启，配置 webhook 后同时通知，不关闭其他渠道。用户可用安装器 `--no-local-notification` 关闭本机通知、`--local-notification` 重新开启；更新和配置其他渠道保留已有选择。通知失败会报告渠道状态，不重新创建申请；仅在用户要求备用入口时使用 `--show-link`。链接持有者可以填写或拒绝，勿随意转发。
 
 ## 等待与执行
 

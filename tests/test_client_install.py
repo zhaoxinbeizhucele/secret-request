@@ -21,7 +21,7 @@ def configure(url, target, **options):
 def test_new_user_initializes_with_only_url(tmp_path):
     target = tmp_path/'private configuration/client.json'
     assert configure('https://relay.example/', target)
-    assert json.loads(target.read_text()) == {'url':'https://relay.example','notifications':{'local':False}}
+    assert json.loads(target.read_text()) == {'url':'https://relay.example','notifications':{'local':True}}
     before = target.read_bytes()
     assert not configure(None, target)
     assert target.read_bytes() == before
@@ -83,13 +83,31 @@ def test_local_configuration_needs_no_test_override(tmp_path):
     assert load_config(target)['url'] == 'http://127.0.0.1:9876'
 
 
-def test_webhook_initialization_uses_existing_environment(tmp_path, monkeypatch):
+@pytest.mark.parametrize(('local','enabled'), [(None,True),(False,False),(True,True)])
+def test_webhook_initialization_uses_existing_environment(tmp_path, monkeypatch, local, enabled):
     monkeypatch.setenv('TEST_SECRET_REQUEST_HOOK','https://notify.example/hook?key=FAKE-PRIVATE')
     target = tmp_path/'client.json'
-    configure('https://relay.example',target,local=False,webhook_type='generic',webhook_env='TEST_SECRET_REQUEST_HOOK')
+    configure('https://relay.example',target,local=local,webhook_type='generic',webhook_env='TEST_SECRET_REQUEST_HOOK')
     assert json.loads(target.read_text())['notifications'] == {
-        'local':False,'webhook':{'type':'generic','url_env':'TEST_SECRET_REQUEST_HOOK'}}
+        'local':enabled,'webhook':{'type':'generic','url_env':'TEST_SECRET_REQUEST_HOOK'}}
     assert 'FAKE-PRIVATE' not in target.read_text()
+
+
+@pytest.mark.parametrize('enabled', [True,False])
+def test_configuring_webhook_and_updating_preserves_local_choice(tmp_path, monkeypatch, enabled):
+    monkeypatch.setenv('TEST_SECRET_REQUEST_HOOK','https://notify.example/hook')
+    target = tmp_path/'client.json'
+    configure(None,target,local=enabled)
+    configure(None,target,webhook_type='generic',webhook_env='TEST_SECRET_REQUEST_HOOK')
+    expected = json.loads(target.read_text())
+    assert expected['notifications'] == {
+        'local':enabled,'webhook':{'type':'generic','url_env':'TEST_SECRET_REQUEST_HOOK'}}
+    assert not configure(None,target)
+    assert json.loads(target.read_text()) == expected
+    configure(None,target,local=not enabled)
+    updated = json.loads(target.read_text())['notifications']
+    assert updated['local'] is not enabled
+    assert updated['webhook'] == expected['notifications']['webhook']
 
 
 def test_oversized_existing_config_is_preserved(tmp_path):

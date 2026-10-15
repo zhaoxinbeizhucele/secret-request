@@ -100,7 +100,7 @@ def _configure_client(url, destination, python, scripts, local, webhook_type, we
         config['url'] = url.rstrip('/')
     if not config.get('url'):
         config['url'] = PUBLIC_URL
-    notifications = config.setdefault('notifications', {'local': False})
+    notifications = config.setdefault('notifications', {'local': True})
     if not isinstance(notifications, dict):
         raise ValueError('Invalid existing notification configuration')
     if local is not None:
