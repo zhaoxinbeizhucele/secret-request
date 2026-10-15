@@ -37,7 +37,7 @@
 - Caddy 2.10.2 实际 config validate 通过。公网 Compose 固定 Caddy 服务地址，主机反代 Compose 固定网关地址；不再默认信任任意转发来源。
 - 最终本地全套 170 passed（102.97 秒）。独立首页截图/代码审查结论 pass；独立部署代码审查发现的代理信任范围已修复，当前运行容器也已读回限定地址。
 
-企微当前状态：协议/重试/错误响应已有自动化覆盖，真实机器人联调缺少可用地址；本次本机通知申请已返回 expired，未收到输入。未拿到可用地址前，不声明真实企微发送已通过。完整地址不会进入聊天、Git、镜像或服务端配置。
+企微当前状态：2026-10-15 已完成真实机器人发送和公网加密交付联调，结果见文末。此前一次配置申请过期，属于历史状态。完整地址不进入聊天、Git、镜像或服务端配置。
 
 ## 运维与回退
 
@@ -64,7 +64,7 @@
 
 首次配置还经过实际公共 HTTPS 中转的虚构地址测试：无需已有通知渠道完成浏览器协议加密、客户端取回、stdin 配置消费者保存，服务 URL 不变且地址不回显；未发真实群消息。PowerShell 安装入口同步支持 Mode、Port、ConfigureWecom，并纳入 ZIP 清单。已提交后的中断显示“结果需核对”，不把已保存配置误报成未保存。
 
-首次配置相关检查最终为 46 passed（16.78 秒）；独立审查复核 PowerShell 参数与中断状态修复后，未发现新的确定性阻塞。此结果独立于真实机器人发送，本次地址申请已过期且未收到输入，真实发送仍需可用机器人地址。
+首次配置相关检查最终为 46 passed（16.78 秒）；独立审查复核 PowerShell 参数与中断状态修复后，未发现新的确定性阻塞。此自动化结果独立于文末记录的真实机器人发送。
 
 
 ## 6c682b6 部署读回
@@ -72,4 +72,15 @@
 - Actions [38680907784](https://github.com/zhaoxinbeizhucele/secret-request/actions/runs/38680907784) 成功，Linux 175 passed、2 skipped（61.28 秒）。GHCR 双架构索引 digest 为 sha256:9bb83cf88da7dcd6dc75e20a994c3f86ac7d47e3055f9462aeb6d2b8dcb6ab8d；通过全新空 Docker 配置匿名拉取，再经既有主机 SSH 传输。
 - 公网已更新到固定标签 sha-6c682b67f17225cc8d0c4c331a35fec9ec5beb88，amd64 image ID 为 sha256:06397eaa12176815f2545aa053c2ce2f5befb1f8ab3c8e4e3eb1241ae7858926；候选容器离线静态资源检查通过，切换后健康状态 healthy，仍仅发布 127.0.0.1:8787。
 - 更新后再次完成公网输入页/资源、多字段加密交付、任务执行、300 秒会话、撤销退出。其他容器 ID 与更新前一致；保留 .env.rollback-139b8f0 和旧镜像标签供回退。
-- 本轮没有收到真实企微地址，未发送群联调消息。首次配置入口现已可用：安装命令加 --configure-wecom；也可以在独立运行环境调用 setup_wecom.py --config <client.json>。
+- 此次部署时尚未收到真实企微地址，未发送群联调消息。首次配置入口：安装命令加 --configure-wecom；也可以在独立运行环境调用 setup_wecom.py --config <client.json>。后续真实联调结果见下。
+
+## 真实企微联调完成
+
+2026-10-15，用户继续联调后，通过 setup_wecom.py 打开的公共 HTTPS 一次性加密页面配置真实机器人。本机配置消费者退出码为 0，返回 wecom_configured；配置文件位于忽略的私有目录，Windows ACL 已禁止继承。未读取或输出机器人地址。
+
+- 实际发送一条标题为“Secret Request 自动联调（虚构，无需处理）”的群通知。发送程序收到 HTTP 成功响应及企微数字 errcode=0，返回 notifications.webhook=sent。这证明企微接口接受消息，不等同于成员已阅读或手机点击验收。
+- 同一申请完成公网输入页和资源检查、虚构多字段加密提交、本机解密和任务执行；校验字段内容一致、空闲超时为 300 秒，随后撤销会话并确认不可继续取用、进程退出。
+- 本机联调结果：success=true、input_page_and_assets=true、multi_field_decrypt_and_execution=true、idle_timeout_seconds=300、revoke_and_process_exit=true、notifications.webhook=sent。测试任务仅接收虚构字段，没有使用真实业务凭据；机器人地址未写入交付物。
+- 收尾读回：匿名公网 /health 与官网成功；匿名 GHCR latest 提供 amd64/arm64；实际部署 revision 仍为 6c682b67f17225cc8d0c4c331a35fec9ec5beb88；从 GitHub 下载的 skill 安装器和企微配置入口与当前实现一致。
+
+目标中的公共服务、默认公共/可选自建 skill、本机快速启动、Compose、企微 webhook、官网和 Actions/GHCR 均已实现并有上述验证。人工桌面/手机阅读通知、打开链接和视觉体验仍按“人工验收”逐项执行；本次自动联调不替代人工验收。
