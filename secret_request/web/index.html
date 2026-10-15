@@ -1,6 +1,6 @@
 <!doctype html>
 <!-- DIRECTION CONTRACT: operate; a recipient responds to a short-lived agent request.
-WORLD: familiar system approval sheet, quiet light/dark surface, no decorative assets.
+WORLD: a crisp centered auth-style card; cool neutrals, hairline borders, soft layered shadow, one indigo accent; no decorative assets.
 FIRST VIEWPORT: request name, declared agent, purpose and deadline above labelled fields.
 FORM: one request, submit or decline; entry links carry per-request permission. -->
 <html lang="zh-CN">
@@ -15,6 +15,7 @@ FORM: one request, submit or decline; entry links carry per-request permission. 
 </head>
 <body>
   <main>
+    <header class="card-head"><svg class="mark" viewBox="0 0 24 24" width="28" height="28" aria-hidden="true"><rect x="1" y="1" width="22" height="22" rx="6"/><path d="M12 7.5a2.5 2.5 0 0 1 1.2 4.7l.8 4.3h-4l.8-4.3A2.5 2.5 0 0 1 12 7.5z"/></svg></header>
     <h1 id="title">机密输入请求</h1>
     <p id="status" role="status" aria-live="polite">正在检查请求…</p>
     <section id="request" hidden aria-label="请求详情">
@@ -44,7 +45,7 @@ FORM: one request, submit or decline; entry links carry per-request permission. 
       </form>
       <p id="close-hint" hidden role="status">已提交并清空输入。若浏览器未自动关闭，请关闭此标签页。</p>
     </section>
-    <p class="footer">由你选择并提供机密，无需连接密码管理器。</p>
   </main>
+  <p class="footer"><span class="lock" aria-hidden="true"></span>由你选择并提供机密，无需连接密码管理器。</p>
 </body>
 </html>

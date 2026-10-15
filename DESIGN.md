@@ -2,84 +2,88 @@
 name: Secret Request
 description: 本人确认用途并输入一次机密的简单表单
 colors:
-  bg: "#f4f6f8"
-  surface: "#ffffff"
-  text: "#18212c"
-  muted: "#526170"
-  line: "#c4cdd6"
-  accent: "#165ac6"
+  bg: "#f6f6f8"
+  card: "#ffffff"
+  inset: "#f8f8fa"
+  text: "#16161a"
+  muted: "#696d78"
+  line: "rgba(15,15,25,.09)"
+  accent: "#5b5bd6"
   on-accent: "#ffffff"
-  error: "#a42622"
-  dark-bg: "#151a20"
-  dark-surface: "#202730"
-  dark-text: "#eef2f6"
-  dark-muted: "#b7c3d0"
-  dark-line: "#607080"
-  dark-accent: "#a5c7ff"
-  dark-on-accent: "#102a4c"
-  dark-error: "#ffb4ab"
+  error: "#c4302b"
+  dark-bg: "#08090a"
+  dark-card: "#111214"
+  dark-inset: "#0b0c0e"
+  dark-text: "#f4f5f7"
+  dark-muted: "#8d929c"
+  dark-line: "rgba(255,255,255,.08)"
+  dark-accent: "#8b8cf8"
+  dark-on-accent: "#0b0b1a"
+  dark-error: "#ff8a80"
 typography:
   title:
-    fontFamily: '"Segoe UI", "Microsoft YaHei", system-ui, sans-serif'
-    fontSize: "26px"
+    fontFamily: 'Inter, "SF Pro Text", system-ui, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif'
+    fontSize: "19px"
     fontWeight: 650
     lineHeight: 1.35
+    letterSpacing: "-0.018em"
   body:
-    fontFamily: '"Segoe UI", "Microsoft YaHei", system-ui, sans-serif'
-    fontSize: "16px"
+    fontFamily: 'Inter, "SF Pro Text", system-ui, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif'
+    fontSize: "15px"
     lineHeight: 1.6
+  code:
+    fontFamily: '"SF Mono", ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace'
 rounded:
-  field: "6px"
-  sheet: "12px"
+  field: "8px"
+  inset: "10px"
+  card: "14px"
 spacing:
-  gap: "8px"
-  action-gap: "12px"
-  paragraph: "20px"
-  sheet-padding: "32px"
+  gap: "10px"
+  field-gap: "18px"
+  card-padding: "36px"
 components:
   button-primary:
     backgroundColor: "{colors.accent}"
     textColor: "{colors.on-accent}"
     rounded: "{rounded.field}"
-    padding: "12px 18px"
+    padding: "11px 16px"
   input:
-    backgroundColor: "{colors.surface}"
+    backgroundColor: "{colors.card}"
     textColor: "{colors.text}"
     rounded: "{rounded.field}"
-    padding: "12px"
+    padding: "10px 12px"
+    focusRing: "3px {colors.accent} @ 28%"
 ---
 
 # Design System: Secret Request
 
 ## Overview
 
-依据已实现的表单整理：标题、自行声明的申请 Agent、申请时间、用途、剩余时间、一个或多个带标签的输入区及提交/拒绝。使用系统字体和本地资源；优先让本人确认正在给谁提供什么。每条申请独立打开；桌面端仅以通知引导到网页。
+输入页是一张居中的“认证卡片”式表单（参考 Clerk 的清爽卡片与表单），首页是偏暗的产品页（参考 Linear 的近黑底、发丝线和克制强调色）。两页共用冷灰中性色、同一靛紫强调色、同一系统字体栈，并随系统切换浅色/深色。只使用系统字体和本地资源；不加载外部字体、图片或脚本，CSP 不变。输入页优先让本人确认正在给谁提供什么：标题、自行声明的申请 Agent、申请时间、用途、剩余时间、一个或多个带标签的输入区及提交/拒绝。
 
 ## Colors
 
-浅色背景与白色表单承载内容；蓝色表示操作，红色表示错误。深色模式随系统切换，使用 frontmatter 对应的 dark 色值。
+冷灰中性色：浅色为 #f6f6f8 背景、白色卡片；深色为 #08090a 近黑背景、#111214 卡片。分隔一律用 1px 半透明发丝线。唯一强调色为靛紫（浅色 #5b5bd6、深色 #8b8cf8），只用于主按钮、剩余时间、焦点环、步骤编号和少量链接；首页主按钮用反色（深色模式白底黑字），不用彩色 CTA。错误使用独立红色，带浅底和细边框。仅在页面顶部边缘使用很淡的径向光晕。
 
 ## Typography
 
-正文 16px / 1.6，标题 26px / 1.35、650 字重。窄屏标题 24px。辅助文字 14px，页脚 13px；机密名称和用途允许换行。
+Inter 优先（仅当本机已安装），回退到 SF Pro / system-ui / 苹方 / 微软雅黑 / Noto Sans CJK。标题字重 600–650、负字距（输入页 -0.018em，首页大标题 -0.035em）；正文 15px / 1.6；标签 13.5px、550 字重；辅助文字 12.5px 的弱灰色。命令、URL 与示例终端用等宽字体。
 
 ## Layout
 
-主体最大 600px，桌面外边距 64px、内边距 32px。520px 以下改为 24px 总横向留白、内边距 24px 20px；提交和拒绝纵向排列。显示控件禁止压缩和换行，输入可收缩。
-
-字段组之间间距 24px，使用同一表单样式。机密支持一次填写多个字段。
+输入卡片最大 440px，居中，内边距 36px；顶部为品牌标记，标题与状态居中。申请详情放在内嵌的浅色信息面板里，行间以发丝线分隔。520px 以下卡片内边距 28px 20px，提交在上、拒绝在下纵向排列，全宽。说明文字“由你选择并提供机密…”放在卡片下方，带小锁图标。
 
 ## Elevation & Depth
 
-使用背景色区分表单，不使用阴影或装饰动画。
+卡片使用 1px 边线加多层极柔和阴影（浅色）或发丝线加内高光（深色）。输入框浅色模式有 1px 阴影；聚焦时边框变为强调色并加 3px 半透明焦点环。不使用装饰动画；过渡仅 0.15s 颜色/阴影，并遵从减少动态效果。
 
 ## Shapes
 
-表单圆角 12px，输入与按钮 6px。字段边框 1px；键盘焦点描边 3px、外偏移 3px。
+卡片 14px（窄屏 12px），信息面板 10px，输入与按钮 8px。密码“显示/隐藏”按钮内嵌在输入框右侧。键盘焦点为 2px 卡片色间隔 + 2px 强调色描边。
 
 ## Components
 
-按钮最小高度 46px，禁用时透明度 .55。密码字段默认隐藏；多行文本明确提示明文显示，选填字段明确标注。错误使用 alert，提交/拒绝显示各自的忙碌文案；请求结束时隐藏输入区。提交确认后尝试关闭输入页，浏览器禁止时显示关闭提示。Windows 与 macOS 只用按需通知打开输入页；webhook 同样指向该页。
+按钮最小高度 44px，禁用时透明度 .55。主按钮带极轻的上亮下实渐变和内高光；次按钮为卡片色加 1px 边线。密码字段默认隐藏；多行文本明确提示明文显示，选填字段明确标注。错误使用 alert，提交/拒绝显示各自的忙碌文案；请求结束时隐藏输入区，结束提示显示在内嵌面板中。提交确认后尝试关闭输入页，浏览器禁止时显示关闭提示。Windows 与 macOS 只用按需通知打开输入页；webhook 同样指向该页。
 
 只展示本次申请。请求结束后隐藏输入；断网明确表示提交尚未确认。Agent 名称由申请方声明，不代表经过身份认证；匿名服务没有已登记设备身份。
 
@@ -88,12 +92,12 @@ components:
 - 保持申请 Agent、用途和操作标签完整可读，保留明显焦点与键盘操作。
 - 终态应明确显示已交付、拒绝或过期，避免继续显示可输入表单。
 - 不在通知、错误信息或截图中放入真实机密，不添加外部字体、分析或远程图片。
-
+- 不使用大面积彩色渐变、蓝色 CTA 对、箭头流程图卡片或 emoji。
 
 ## 官网首页 /
 
-首页继承输入页的蓝白配色、系统字体、深色模式和焦点样式。它是产品介绍与安装入口，不承载输入表单；申请表单保持在 /input/{id}。页面按介绍、三步交付、安装命令、三种接入、信任边界排列。桌面最大宽度 1120px，620px 以下改为单列。
+首页与输入页共享色板、字体与焦点样式，默认按系统主题显示，深色为主视觉。它是产品介绍与安装入口，不承载输入表单；申请表单保持在 /input/{id}。顺序：居中的简短介绍（胶囊标签、单行标题、弱灰引导段、反色主按钮 + 描边次按钮）；标注为“示例”的窗口框，左侧 Agent 终端片段、右侧缩略输入卡片；三步交付（发丝线分格）；安装命令与复制按钮；三种接入方式卡片；信任边界定义列表。桌面最大宽度 1080px，860px 以下单列，620px 以下收紧间距。顶部导航吸顶、半透明模糊背景。
 
-首页标题 40–68px，移动端 46px；章节标题 28–38px，小屏 29px；引导正文 21–24px；品牌和示意标题 18–20px；正文 15–16px，说明 12–14px。代码使用 Consolas / SFMono-Regular / monospace，限于命令与 URL。无外部字体、图片、统计脚本。
+首页标题 38–64px，移动端 36px；章节标题 26–34px，移动端 25px；引导正文 17px；正文 14.5–15px，说明 12–13px。
 
-安装命令提供复制按钮及成功/剪贴板失败的状态反馈，错误时支持手动选中。流程示意明确标注为示例。公共服务、本机快速启动和自建 HTTPS 服务并列说明；本机链接不能手机填写的边界在页面明确列出。支持键盘跳转正文、导航锚点、减少动态效果和系统深色模式。
+安装命令提供复制按钮及成功/剪贴板失败的状态反馈，错误时支持手动选中。公共服务、本机快速启动和自建 HTTPS 服务并列说明；本机链接不能手机填写的边界在页面明确列出。支持键盘跳转正文、导航锚点、减少动态效果和系统深色模式。
