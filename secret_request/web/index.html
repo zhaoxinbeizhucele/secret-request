@@ -10,12 +10,13 @@ FORM: one request, submit or decline; entry links carry per-request permission. 
   <meta name="referrer" content="no-referrer">
   <meta name="color-scheme" content="light dark">
   <title>机密输入请求</title>
+  <script src="/assets/theme.js"></script>
   <link rel="stylesheet" href="/assets/style.css">
   <script type="module" src="/assets/app.js"></script>
 </head>
 <body>
   <main>
-    <header class="card-head"><svg class="mark" viewBox="0 0 24 24" width="28" height="28" aria-hidden="true"><rect x="1" y="1" width="22" height="22" rx="6"/><path d="M12 7.5a2.5 2.5 0 0 1 1.2 4.7l.8 4.3h-4l.8-4.3A2.5 2.5 0 0 1 12 7.5z"/></svg></header>
+    <header class="card-head"><div class="theme-switch" role="radiogroup" aria-label="界面主题"><button type="button" role="radio" aria-checked="false" tabindex="-1" data-theme-choice="light" aria-label="亮色" title="亮色"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="8" cy="8" r="3"/><path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1.06 1.06M11.54 11.54l1.06 1.06M3.4 12.6l1.06-1.06M11.54 4.46l1.06-1.06"/></svg></button><button type="button" role="radio" aria-checked="false" tabindex="-1" data-theme-choice="dark" aria-label="暗色" title="暗色"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M13.5 9.6A5.5 5.5 0 0 1 6.4 2.5a5.5 5.5 0 1 0 7.1 7.1z"/></svg></button><button type="button" role="radio" aria-checked="true" tabindex="0" data-theme-choice="system" aria-label="跟随系统" title="跟随系统"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="1.75" y="2.5" width="12.5" height="8.5" rx="1.5"/><path d="M5.5 14h5M8 11v3"/></svg></button></div><svg class="mark" viewBox="0 0 24 24" width="28" height="28" aria-hidden="true"><rect x="1" y="1" width="22" height="22" rx="6"/><path d="M12 7.5a2.5 2.5 0 0 1 1.2 4.7l.8 4.3h-4l.8-4.3A2.5 2.5 0 0 1 12 7.5z"/></svg></header>
     <h1 id="title">机密输入请求</h1>
     <p id="status" role="status" aria-live="polite">正在检查请求…</p>
     <section id="request" hidden aria-label="请求详情">

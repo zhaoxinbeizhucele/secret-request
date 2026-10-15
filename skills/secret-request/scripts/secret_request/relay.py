@@ -274,7 +274,7 @@ def create_app(settings: Settings, clock=time.monotonic):
 
     @app.get("/assets/{name}")
     async def asset(name: str):
-        if name not in {"app.js", "style.css", "crypto.js", "home.css", "home.js"}:
+        if name not in {"app.js", "style.css", "crypto.js", "home.css", "home.js", "theme.js"}:
             raise HTTPException(404)
         return FileResponse(ROOT / "web" / name)
 

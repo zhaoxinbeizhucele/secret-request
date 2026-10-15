@@ -1,19 +1,41 @@
 /* Input card · centered auth-style card. Cool neutrals, hairline border, soft layered shadow, indigo accent. System fonts only (CSP: style-src 'self'). */
-:root{color-scheme:light dark;
-  --bg:#f6f6f8;--card:#fff;--inset:#f8f8fa;--text:#16161a;--muted:#696d78;--faint:#6b6f7a;--line:rgba(15,15,25,.09);--line-2:rgba(15,15,25,.15);--field:#fff;
-  --accent:#5b5bd6;--accent-2:#4f4fc8;--on-accent:#fff;--ring:rgba(91,91,214,.28);--error:#c4302b;--error-bg:#fdf1f0;--error-line:rgba(196,48,43,.25);
-  --shadow:0 0 0 1px rgba(15,15,25,.06),0 1px 1px rgba(15,15,25,.03),0 4px 8px -2px rgba(15,15,25,.05),0 24px 48px -16px rgba(15,15,25,.12);
-  --field-shadow:0 1px 2px rgba(15,15,25,.05);
+/* Theme switch: each color is written once as a light/dark pair, var(--light, L) var(--dark, D).
+   Exactly one of --light/--dark is "initial" (its fallback is used) and the other is empty.
+   No data-theme = follow the system; data-theme="light|dark" (set by theme.js) overrides it. */
+:root{--light:initial;--dark: ;color-scheme:light}
+@media(prefers-color-scheme:dark){:root{--light: ;--dark:initial;color-scheme:dark}}
+:root[data-theme=light]{--light:initial;--dark: ;color-scheme:light}
+:root[data-theme=dark]{--light: ;--dark:initial;color-scheme:dark}
+:root{
+  --bg:var(--light,#f6f6f8) var(--dark,#08090a);
+  --card:var(--light,#fff) var(--dark,#111214);
+  --inset:var(--light,#f8f8fa) var(--dark,#0b0c0e);
+  --text:var(--light,#16161a) var(--dark,#f4f5f7);
+  --muted:var(--light,#696d78) var(--dark,#8d929c);
+  --faint:var(--light,#6b6f7a) var(--dark,#80858f);
+  --line:var(--light,rgba(15,15,25,.09)) var(--dark,rgba(255,255,255,.08));
+  --line-2:var(--light,rgba(15,15,25,.15)) var(--dark,rgba(255,255,255,.13));
+  --field:var(--light,#fff) var(--dark,#0b0c0e);
+  --accent:var(--light,#5b5bd6) var(--dark,#8b8cf8);
+  --accent-2:var(--light,#4f4fc8) var(--dark,#7b7cf0);
+  --on-accent:var(--light,#fff) var(--dark,#0b0b1a);
+  --ring:var(--light,rgba(91,91,214,.28)) var(--dark,rgba(139,140,248,.32));
+  --error:var(--light,#c4302b) var(--dark,#ff8a80);
+  --error-bg:var(--light,#fdf1f0) var(--dark,rgba(255,99,88,.08));
+  --error-line:var(--light,rgba(196,48,43,.25)) var(--dark,rgba(255,138,128,.28));
+  --shadow:var(--light,0 0 0 1px rgba(15,15,25,.06),0 1px 1px rgba(15,15,25,.03),0 4px 8px -2px rgba(15,15,25,.05),0 24px 48px -16px rgba(15,15,25,.12)) var(--dark,0 0 0 1px rgba(255,255,255,.08),0 1px 0 rgba(255,255,255,.06) inset,0 20px 40px -20px rgba(0,0,0,.8));
+  --field-shadow:var(--light,0 1px 2px rgba(15,15,25,.05)) var(--dark,none);
+  --glow:var(--light,transparent) var(--dark,rgba(110,110,240,.10));
+  --secondary-bg:var(--light,#fff) var(--dark,rgba(255,255,255,.03));
+  --secondary-hover:var(--light,#f8f8fa) var(--dark,rgba(255,255,255,.07));
+  --secondary-shadow:var(--light,0 0 0 1px rgba(15,15,25,.15),0 1px 2px rgba(15,15,25,.05)) var(--dark,0 0 0 1px rgba(255,255,255,.16));
   --sans:Inter,"SF Pro Text",system-ui,-apple-system,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
-  --mono:"SF Mono",ui-monospace,"JetBrains Mono",Menlo,Consolas,"Noto Sans Mono CJK SC",monospace}
-@media(prefers-color-scheme:dark){:root{--bg:#08090a;--card:#111214;--inset:#0b0c0e;--text:#f4f5f7;--muted:#8d929c;--faint:#80858f;--line:rgba(255,255,255,.08);--line-2:rgba(255,255,255,.13);--field:#0b0c0e;
-  --accent:#8b8cf8;--accent-2:#7b7cf0;--on-accent:#0b0b1a;--ring:rgba(139,140,248,.32);--error:#ff8a80;--error-bg:rgba(255,99,88,.08);--error-line:rgba(255,138,128,.28);
-  --shadow:0 0 0 1px rgba(255,255,255,.08),0 1px 0 rgba(255,255,255,.06) inset,0 20px 40px -20px rgba(0,0,0,.8);
-  --field-shadow:none}}
+  --mono:"SF Mono",ui-monospace,"JetBrains Mono",Menlo,Consolas,"Noto Sans Mono CJK SC",monospace
+}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
-body{margin:0;min-height:100vh;background:var(--bg);color:var(--text);font:15px/1.6 var(--sans);-webkit-font-smoothing:antialiased;display:flex;flex-direction:column;align-items:center;padding:64px 20px 40px}
-@media(prefers-color-scheme:dark){body{background:radial-gradient(80% 50% at 50% -10%,rgba(110,110,240,.10),transparent 70%) no-repeat,var(--bg)}}
+body{margin:0;min-height:100vh;color:var(--text);font:15px/1.6 var(--sans);-webkit-font-smoothing:antialiased;display:flex;flex-direction:column;align-items:center;padding:64px 20px 40px}
+body{background:radial-gradient(80% 50% at 50% -10%,var(--glow),transparent 70%) no-repeat,var(--bg)}
 main{width:min(100%,440px);padding:36px 36px 30px;background:var(--card);border-radius:14px;box-shadow:var(--shadow)}
 .card-head{display:flex;justify-content:center;margin-bottom:18px}
 .mark rect{fill:var(--text)}.mark path{fill:var(--card)}
@@ -44,9 +66,8 @@ button:disabled{opacity:.55;cursor:wait;filter:none}
 .quiet{position:absolute;right:5px;top:50%;transform:translateY(-50%);min-height:30px;padding:4px 10px;background:transparent;color:var(--muted);box-shadow:none;font-weight:500;font-size:12.5px;border-radius:6px;white-space:nowrap}
 .quiet:hover{background:var(--inset);color:var(--text);filter:none}
 .quiet[aria-pressed=true]{color:var(--accent)}
-.secondary-button{background:var(--card);color:var(--text);box-shadow:0 0 0 1px var(--line-2),var(--field-shadow)}
-.secondary-button:hover{background:var(--inset);filter:none}
-@media(prefers-color-scheme:dark){.secondary-button{background:rgba(255,255,255,.03);box-shadow:0 0 0 1px rgba(255,255,255,.16)}.secondary-button:hover{background:rgba(255,255,255,.07)}}
+.secondary-button{background:var(--secondary-bg);color:var(--text);box-shadow:var(--secondary-shadow)}
+.secondary-button:hover{background:var(--secondary-hover);filter:none}
 .actions{display:flex;gap:10px;margin-top:22px}
 #submit{flex:1}
 :focus-visible{outline:0;box-shadow:0 0 0 2px var(--card),0 0 0 4px var(--accent)}
@@ -59,3 +80,13 @@ button:disabled{opacity:.55;cursor:wait;filter:none}
 .lock:before{content:"";position:absolute;left:1.5px;top:-5px;width:6px;height:6px;border:1.5px solid currentColor;border-bottom:0;border-radius:3px 3px 0 0;box-sizing:border-box}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
 @media(max-width:520px){body{padding:16px 12px 28px}main{padding:28px 20px 22px;border-radius:12px}.actions{flex-direction:column}.actions button{width:100%}dl div{grid-template-columns:76px 1fr;gap:8px}dl{padding:4px 12px}}
+
+/* Theme switch (shown only when theme.js runs) */
+main{position:relative}
+.theme-switch{display:none}
+.theme-js .theme-switch{position:absolute;top:14px;right:14px;display:inline-flex;gap:2px;padding:2px;border:1px solid var(--line);border-radius:8px;background:var(--inset)}
+.theme-switch button{display:grid;place-items:center;width:26px;height:24px;min-height:0;padding:0;border:0;border-radius:6px;background:transparent;color:var(--muted);box-shadow:none;filter:none;cursor:pointer}
+.theme-switch button:hover{color:var(--text);filter:none}
+.theme-switch button[aria-checked=true]{background:var(--card);color:var(--text);box-shadow:0 0 0 1px var(--line-2),0 1px 2px rgba(0,0,0,.08)}
+.theme-switch button:focus-visible{box-shadow:0 0 0 2px var(--accent)}
+.theme-switch svg{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
