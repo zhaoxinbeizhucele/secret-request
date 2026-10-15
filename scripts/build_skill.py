@@ -3,7 +3,7 @@ from pathlib import Path
 import shutil
 
 CLIENT_MODULES = ("__init__.py", "client.py", "crypto.py", "fields.py", "notifications.py", "session.py", "windows_job.py", "relay.py", "server.py")
-WEB_FILES = ('index.html', 'app.js', 'crypto.js', 'style.css', 'home.html', 'home.css', 'home.js')
+WEB_FILES = ('index.html', 'app.js', 'crypto.js', 'style.css', 'home.html', 'home.css', 'home.js', 'theme.js')
 
 
 def build(root):

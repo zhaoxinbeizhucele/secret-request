@@ -1,11 +1,30 @@
 /* Secret Request · homepage. Dark-first, hairline borders, one indigo accent. System fonts only (CSP: style-src 'self'). */
-:root{color-scheme:dark light;
-  --bg:#08090a;--bg-2:#0e0f11;--panel:#121316;--text:#f7f8f8;--muted:#8a8f98;--faint:#80858f;--line:rgba(255,255,255,.08);--line-2:rgba(255,255,255,.14);
-  --accent:#8b8cf8;--accent-ink:#0b0b1a;--btn:#f7f8f8;--btn-ink:#08090a;--glow:rgba(110,110,240,.16);--code:#d0d6e0;
+/* Theme switch: each color is written once as a light/dark pair, var(--light, L) var(--dark, D).
+   Exactly one of --light/--dark is "initial" (its fallback is used) and the other is empty.
+   No data-theme = follow the system; data-theme="light|dark" (set by theme.js) overrides it. */
+:root{--light:initial;--dark: ;color-scheme:light}
+@media(prefers-color-scheme:dark){:root{--light: ;--dark:initial;color-scheme:dark}}
+:root[data-theme=light]{--light:initial;--dark: ;color-scheme:light}
+:root[data-theme=dark]{--light: ;--dark:initial;color-scheme:dark}
+:root{
+  --bg:var(--light,#ffffff) var(--dark,#08090a);
+  --bg-2:var(--light,#f7f7f8) var(--dark,#0e0f11);
+  --panel:var(--light,#ffffff) var(--dark,#121316);
+  --text:var(--light,#16161a) var(--dark,#f7f8f8);
+  --muted:var(--light,#6b6f7a) var(--dark,#8a8f98);
+  --faint:var(--light,#6b6f7a) var(--dark,#80858f);
+  --line:var(--light,rgba(15,15,25,.08)) var(--dark,rgba(255,255,255,.08));
+  --line-2:var(--light,rgba(15,15,25,.14)) var(--dark,rgba(255,255,255,.14));
+  --accent:var(--light,#5b5bd6) var(--dark,#8b8cf8);
+  --accent-ink:var(--light,#fff) var(--dark,#0b0b1a);
+  --btn:var(--light,#16161a) var(--dark,#f7f8f8);
+  --btn-ink:var(--light,#fff) var(--dark,#08090a);
+  --glow:var(--light,rgba(91,91,214,.10)) var(--dark,rgba(110,110,240,.16));
+  --code:var(--light,#2b2d33) var(--dark,#d0d6e0);
+  --window-shadow:var(--light,0 1px 2px rgba(15,15,25,.04),0 24px 60px -24px rgba(15,15,25,.18)) var(--dark,0 0 0 1px var(--line) inset,0 30px 80px -30px rgba(0,0,0,.55),0 0 120px -40px var(--glow));
   --sans:Inter,"SF Pro Text",system-ui,-apple-system,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
-  --mono:"SF Mono",ui-monospace,"JetBrains Mono",Menlo,Consolas,"Noto Sans Mono CJK SC",monospace}
-@media(prefers-color-scheme:light){:root{--bg:#ffffff;--bg-2:#f7f7f8;--panel:#ffffff;--text:#16161a;--muted:#6b6f7a;--faint:#6b6f7a;--line:rgba(15,15,25,.08);--line-2:rgba(15,15,25,.14);
-  --accent:#5b5bd6;--accent-ink:#fff;--btn:#16161a;--btn-ink:#fff;--glow:rgba(91,91,214,.10);--code:#2b2d33}}
+  --mono:"SF Mono",ui-monospace,"JetBrains Mono",Menlo,Consolas,"Noto Sans Mono CJK SC",monospace
+}
 *{box-sizing:border-box;scrollbar-color:var(--line-2) var(--bg)}
 html{scroll-behavior:smooth;scroll-padding-top:80px}
 body{margin:0;background:var(--bg);color:var(--text);font:15px/1.7 var(--sans);-webkit-font-smoothing:antialiased;font-feature-settings:"cv11","ss01"}
@@ -37,8 +56,7 @@ h1{font-size:clamp(38px,5.4vw,64px);line-height:1.08;letter-spacing:-.035em;font
 .button.ghost:hover{background:var(--line);opacity:1}
 
 .preview{padding-bottom:104px}
-.window{border:1px solid var(--line-2);border-radius:14px;background:var(--bg-2);box-shadow:0 0 0 1px var(--line) inset,0 30px 80px -30px rgba(0,0,0,.55),0 0 120px -40px var(--glow);overflow:hidden}
-@media(prefers-color-scheme:light){.window{box-shadow:0 1px 2px rgba(15,15,25,.04),0 24px 60px -24px rgba(15,15,25,.18)}}
+.window{border:1px solid var(--line-2);border-radius:14px;background:var(--bg-2);box-shadow:var(--window-shadow);overflow:hidden}
 .window-bar{display:flex;align-items:center;gap:14px;height:40px;padding:0 16px;border-bottom:1px solid var(--line);font:12px/1 var(--mono);color:var(--faint)}
 .lights{display:flex;gap:6px}.lights i{width:9px;height:9px;border-radius:50%;background:var(--line-2)}
 .panes{display:grid;grid-template-columns:1.25fr 1fr}
@@ -113,3 +131,14 @@ footer a{margin-left:auto;color:var(--muted)}footer a:hover{color:var(--text)}
   footer{flex-wrap:wrap;gap:6px 18px}footer a{margin-left:0;width:100%}
 }
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important}}
+
+/* Theme switch (shown only when theme.js runs) */
+.header-inner nav{margin-left:auto}
+.theme-switch{display:none}
+.theme-js .theme-switch{display:inline-flex;gap:2px;padding:2px;border:1px solid var(--line-2);border-radius:8px;background:var(--bg-2);flex-shrink:0}
+.theme-switch button{display:grid;place-items:center;width:28px;height:26px;padding:0;border:0;border-radius:6px;background:transparent;color:var(--muted);cursor:pointer;transition:color .15s,background .15s}
+.theme-switch button:hover{color:var(--text)}
+.theme-switch button[aria-checked=true]{background:var(--panel);color:var(--text);box-shadow:0 0 0 1px var(--line-2),0 1px 2px rgba(0,0,0,.08)}
+.theme-switch button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.theme-switch svg{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+@media(max-width:620px){.header-inner{position:relative}.theme-js .theme-switch{position:absolute;right:0;top:12px}}
