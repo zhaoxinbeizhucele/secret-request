@@ -1,8 +1,9 @@
-"""Bundle the client-only runtime into the distributable skill. No config files."""
+"""Bundle explicit runtime files, including the optional loopback relay."""
 from pathlib import Path
 import shutil
 
-CLIENT_MODULES = ("__init__.py", "client.py", "crypto.py", "fields.py", "notifications.py", "session.py", "windows_job.py")
+CLIENT_MODULES = ("__init__.py", "client.py", "crypto.py", "fields.py", "notifications.py", "session.py", "windows_job.py", "relay.py", "server.py")
+WEB_FILES = ('index.html', 'app.js', 'crypto.js', 'style.css', 'home.html', 'home.css', 'home.js')
 
 
 def build(root):
@@ -10,6 +11,11 @@ def build(root):
     target.mkdir(parents=True, exist_ok=True)
     for name in CLIENT_MODULES:
         shutil.copyfile(root / "secret_request" / name, target / name)
+    (target/'web').mkdir(exist_ok=True)
+    for name in WEB_FILES:
+        shutil.copyfile(root/'secret_request/web'/name, target/'web'/name)
+    shutil.copyfile(root/'requirements.txt', target.parent/'requirements.txt')
+    shutil.copyfile(root/'constraints.txt', target.parent/'constraints.txt')
     for name in ("windows", "macos"):
         source = root/name
         destination = target.parent/'native-source'/name
@@ -18,9 +24,14 @@ def build(root):
         for file in names:
             shutil.copyfile(source/file, destination/file)
     shutil.copyfile(root/'scripts/build_native.py', target.parent/'build_native.py')
-    if (root/'secret_request/native').is_dir():
-        shutil.copytree(root/'secret_request/native', target/'native', dirs_exist_ok=True,
-                        ignore=shutil.ignore_patterns('*.pdb','*.dSYM','__pycache__'))
+    for name in ('windows/SecretRequest.Notify.exe',
+                 'macos/SecretRequestNotify.app/Contents/Info.plist',
+                 'macos/SecretRequestNotify.app/Contents/MacOS/SecretRequestNotify'):
+        source = root/'secret_request/native'/name
+        if source.is_file() and not source.is_symlink():
+            destination = target/'native'/name
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, destination)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="通过企微通知和加密网页，把机密交给本机任务程序，避免在与 Agent 的聊天里粘贴密码。支持公共中转、本机运行和 Docker 自建。">
+  <title>Secret Request · 让机密走自己的通道</title>
+  <link rel="stylesheet" href="/assets/home.css">
+  <script src="/assets/home.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#main">跳到正文</a>
+  <header class="site-header wrap">
+    <a class="brand" href="/" aria-label="Secret Request 首页"><svg viewBox="0 0 28 28" width="28" height="28" aria-hidden="true"><path d="M5 8h18v15H5zM9 8V6a5 5 0 0 1 10 0v2M14 13v5"/></svg>Secret Request</a>
+    <nav aria-label="主导航"><a href="#how">工作方式</a><a href="#start">开始使用</a><a href="https://github.com/zhaoxinbeizhucele/secret-request">GitHub <span aria-hidden="true">↗</span></a></nav>
+  </header>
+  <main id="main">
+    <section class="hero wrap">
+      <div class="intro">
+        <h1>让机密走<br>自己的通道。</h1>
+        <p class="lead">Agent 需要密码时，<br class="desktop">不必把它粘贴进聊天。</p>
+        <p class="description">收到企微通知，在独立网页填写。浏览器加密后，由发起电脑解密，直接交给任务程序使用。</p>
+        <div class="hero-actions"><a class="button" href="#start">添加到你的 Agent</a><a class="text-link" href="#privacy">了解信任边界</a></div>
+      </div>
+      <div class="handoff" aria-label="使用流程示意，不是可填写的申请">
+        <div class="handoff-caption">一次填写，一次交付</div>
+        <div class="sample-message"><span class="sample-source">企微通知 · 示例</span><strong>Codex · 测试库登录</strong><p>为已授权的查询提供用户名和密码。</p><span class="sample-link">打开本次申请</span></div>
+        <div class="route"><span>你的浏览器</span><span class="route-line" aria-hidden="true"></span><span>密文中转</span><span class="route-line" aria-hidden="true"></span><span>本机任务</span></div>
+        <p class="handoff-note">私钥留在发起电脑。<br>任务状态回到 Agent，机密不回到聊天。</p>
+      </div>
+    </section>
+    <section class="how wrap" id="how">
+      <h2>申请在聊天里说明，<br>机密在网页里交付。</h2>
+      <ol class="steps">
+        <li><h3>Agent 发起申请</h3><p>说明用途和所需字段，通过本机客户端发送企微通知。</p></li>
+        <li><h3>你确认并填写</h3><p>打开本次申请链接，核对用途后提交，也可以拒绝。浏览器先加密，再发送。</p></li>
+        <li><h3>本机程序执行</h3><p>客户端一次取回并解密，将输入交给任务程序。短期会话可复用，任务结束后撤销。</p></li>
+      </ol>
+    </section>
+    <section class="start wrap" id="start">
+      <div class="section-intro"><h2>从一个 skill 开始。</h2><p>适用于支持 Skills 的 Agent。安装后开启新会话，让 Agent 初始化 Secret Request 并配置企微通知。</p></div>
+      <div class="install-command"><code id="install-command">npx skills add zhaoxinbeizhucele/secret-request -g</code><button type="button" id="copy-command" aria-label="复制安装命令">复制命令</button></div>
+      <p id="copy-status" role="status" class="copy-status"></p>
+      <p class="requirements">需要 Node.js 22.20+ 与 Python 3.12+。企微 webhook 在本机配置，完整地址不要发进聊天。</p>
+      <div class="modes">
+        <article><h3>使用公共服务</h3><span class="mode-note">新安装默认</span><p>无需部署，使用本站中转。让 Agent 初始化并连接企微 webhook，就能发起申请。</p><code>https://secret-request.eicai.cc</code></article>
+        <article><h3>只在本机运行</h3><span class="mode-note">无需 Docker 或域名</span><p>让 Agent 选择本机模式并拉起服务器。填写链接在同一台电脑打开，停止进程即关闭服务。</p><code>secret-request-server</code></article>
+        <article><h3>部署自己的服务</h3><span class="mode-note">自己的主机与 HTTPS</span><p>使用 GHCR 镜像和 Docker Compose 部署，再让 Agent 使用你的服务地址。支持桌面和手机填写。</p><a class="text-link" href="https://github.com/zhaoxinbeizhucele/secret-request#部署中转服务">查看部署指引 <span aria-hidden="true">↗</span></a></article>
+      </div>
+    </section>
+    <section class="privacy wrap" id="privacy">
+      <h2>中转的是密文。<br>信任边界也要讲清楚。</h2>
+      <div class="privacy-copy"><p>正常流程中，服务仅暂存加密输入，私钥留在发起电脑。服务不建申请历史数据库；领取一次即移除密文，重启会使未交付申请失效。</p><p>你仍需信任提供输入网页的服务，以及本机执行任务的程序。被篡改的网页能在加密前读取输入，本机完整权限的程序也不受本工具隔离。</p><p>申请者名称由 Agent 自行声明。填写链接持有者可以提交或拒绝，请核对用途，不要随意转发。公共服务提供有界限流，无可用性承诺；需要独立控制时可以自建。</p></div>
+    </section>
+  </main>
+  <footer class="wrap"><span>Secret Request</span><span>开源的机密交付通道</span><a href="https://github.com/zhaoxinbeizhucele/secret-request">源码与使用文档</a></footer>
+</body>
+</html>

@@ -21,7 +21,7 @@ def configure(url, target, **options):
 def test_new_user_initializes_with_only_url(tmp_path):
     target = tmp_path/'private configuration/client.json'
     assert configure('https://relay.example/', target)
-    assert json.loads(target.read_text()) == {'url':'https://relay.example','notifications':{'local':True}}
+    assert json.loads(target.read_text()) == {'url':'https://relay.example','notifications':{'local':False}}
     before = target.read_bytes()
     assert not configure(None, target)
     assert target.read_bytes() == before
@@ -63,14 +63,24 @@ def test_invalid_url_not_saved_or_disclosed(tmp_path, url, capsys):
     assert not list(target.parent.glob('.client-*'))
 
 
-def test_missing_url_reports_bootstrap_requirement(tmp_path):
-    with pytest.raises(ValueError, match='requires --url'):
-        configure(None, tmp_path/'client.json')
-    result = subprocess.run([sys.executable,'-I',str(SCRIPTS/'install.py'),
-                             '--config-directory',str(tmp_path/'config'),
-                             '--application-directory',str(tmp_path/'app')], capture_output=True)
-    assert result.returncode != 0 and b'requires --url' in result.stderr
-    assert not (tmp_path/'app').exists()
+def test_new_user_defaults_to_public_and_updates_preserve_service(tmp_path):
+    target = tmp_path/'client.json'
+    configure(None, target)
+    assert json.loads(target.read_text())['url'] == installer.PUBLIC_URL
+    assert installer.select_url(None, None, 8787, True) is None
+    assert installer.select_url(None, None, 8787, False) == installer.PUBLIC_URL
+    assert installer.select_url('local', None, 9876, False) == 'http://127.0.0.1:9876'
+    with pytest.raises(ValueError):
+        installer.select_url('custom', None, 8787, False)
+    with pytest.raises(ValueError):
+        installer.select_url('local', 'https://other.example', 8787, False)
+
+
+def test_local_configuration_needs_no_test_override(tmp_path):
+    target = tmp_path/'client.json'
+    configure('http://127.0.0.1:9876', target)
+    from secret_request.client import load_config
+    assert load_config(target)['url'] == 'http://127.0.0.1:9876'
 
 
 def test_webhook_initialization_uses_existing_environment(tmp_path, monkeypatch):

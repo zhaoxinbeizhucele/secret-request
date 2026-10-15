@@ -10,13 +10,13 @@ description: 当执行用户已授权的任务，确实缺少密码、API Key、
 - 在已授权的实际任务中确认缺少机密时，主动进入本流程，不要等用户说“使用 secret-request”，也不要先让用户在聊天提供密码、Token 或带机密的命令。服务和通知已配置时，简短说明将通过网页申请，然后直接发起；不要另问一次“要不要发通知”。用户明确限制通知或拒绝申请时遵从其选择。
 - 例如：用户要求调用某个 API，但所需 API Key 未配置；要求连接指定数据库，但没有可用登录凭据；要求使用一个已过期且无法正常刷新的 Token。用户名与密码等同时缺少的字段合并为一条申请，只申请当前任务需要的信息。
 - 先利用任务上下文中已知的认证方式或有效会话。检查配置是否可用时不输出机密值；认证失败先判断是否为网络、服务地址、权限或配置问题，不把所有 401/403 或连接失败都解释为需要新密码。
-- 尚未初始化时转到下方安装指引；只询问缺少的服务 URL、通知偏好等非敏感信息。拿到机密后继续原任务，验证业务结果；不要把“已通知”或“用户已填写”当作任务完成。
+- 尚未初始化时转到下方安装指引；新安装默认使用公共中转 https://secret-request.eicai.cc，告知该选择；用户可改选本机快速启动或自建 HTTPS 服务，按安装指引执行。通知优先使用企微 webhook。只询问确实缺少的非敏感信息。拿到机密后继续原任务，验证业务结果；不要把“已通知”或“用户已填写”当作任务完成。
 
 ## 入口与申请
 
 本 skill 可通过 `npx skills add` 安装，所需脚本随包分发。首次使用、用户要求安装或升级客户端时，按 [客户端初始化](references/setup.md) 完成依赖与本机配置；入口就绪时直接使用。安装只涉及本机使用端，不需要修改全局 `AGENTS.md`、`CLAUDE.md` 或其他 Agent 的全局指令。
 
-Windows 入口为 `%LOCALAPPDATA%\Programs\SecretRequest\secret-request.cmd`；macOS / Linux 默认入口为 `~/.local/share/secret-request/secret-request`。也可使用已经配置的 `secret-request` 命令。[安装器](scripts/install.py) 支持 Python 3.12+，首次用服务 URL 自动生成配置。中转服务匿名接入，不需要账号、设备登记、配对码、长期 token 或管理员配置文件。
+Windows 入口为 `%LOCALAPPDATA%\Programs\SecretRequest\secret-request.cmd`；macOS / Linux 默认入口为 `~/.local/share/secret-request/secret-request`。也可使用已经配置的 `secret-request` 命令。[安装器](scripts/install.py) 支持 Python 3.12+，首次默认公共服务，也可用 --mode local 启动本机中转，或 --mode custom --url 指定自建服务。中转服务匿名接入，不需要账号、设备登记、配对码、长期 token 或管理员配置文件。
 
 ```powershell
 & "$env:LOCALAPPDATA\Programs\SecretRequest\secret-request.cmd" --agent-name 'Codex' --name '测试库登录' --purpose '查询已授权测试库的结构' --fields-file .\fields.json -- python .\query.py

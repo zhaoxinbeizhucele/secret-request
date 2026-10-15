@@ -1,42 +1,45 @@
 # 客户端初始化
 
-匿名中转只需要服务 URL，不需要登录、设备登记、配对码、长期 token 或管理员提供的配置文件。`npx skills add` 只分发 skill 文件；首次使用时由 Agent 运行本节安装器，自动生成本机配置。
+`npx skills add` 只分发文件，首次使用由 Agent 运行本 skill 的 `scripts/install.py`。需要 Python 3.12+。不修改全局 AGENTS.md / CLAUDE.md。
 
-本项目安装器不修改全局 `AGENTS.md`、`CLAUDE.md` 或其他 Agent 指令文件，也不要求用户手工添加规则。主动使用由宿主 Agent 发现并选择本技能；触发条件写在 `SKILL.md` 的 description 与正文中。新安装或更新后，按宿主要求刷新技能或开启新会话；不能把客户端初始化成功等同于宿主已加载新版技能。
+## 选择中转方式
 
-## 首次使用
+已有配置时优先复用。新用户未指定服务时使用默认公共服务 `https://secret-request.eicai.cc`，告知用户该选择；用户希望自建时提供下列选择，无需要求填写尚不存在的配置文件：
 
-1. 从当前 `SKILL.md` 的实际位置找到 `scripts/install.py`，兼容复制和链接安装。
-2. 检查 Python 3.12+。如果没有可用的现有配置和用户已提供的地址，只询问“使用哪个中转服务 URL？”。不要要求用户寻找尚不存在的 client.json，也不要从旧项目、备份或其他设备复制认证。
-3. 确认通知方式：Windows/macOS 可使用本机通知；webhook 使用已有环境变量名，完整 webhook 地址不要粘贴到聊天。Linux 使用 webhook，本版没有 Linux 本机通知组件。
-4. 运行安装器，再检查入口和服务连接。示例 URL 不是可用服务，必须换成用户选择的 HTTPS 地址。
+- 公共：`--mode public`（新安装省略参数也是公共服务）。
+- 本机：`--mode local --port 8787`，无需 Docker、域名或部署，只能本机浏览器填写。
+- 自建 HTTPS：`--mode custom --url https://relay.example.com`；部署方法见仓库 README 的“部署中转服务”。
+
+默认只要求企微 webhook，本机通知关闭。复用已有的 `SECRET_REQUEST_WEBHOOK` 或用 `--webhook-env NAME` 指定其他变量名。没有可用 webhook 时，通过安全凭据申请流程交给本机配置程序，不让用户在聊天发送完整地址。配置程序可将 webhook 写入受保护的 `client.json` 的 `notifications.webhook.url`，并设置 type 为 wecom；不要输出地址。环境变量方式只写入变量名，客户端每次运行均需能读到该变量。
 
 Windows：
 
 ```powershell
-python -I "<skill目录>\scripts\install.py" --url "https://your-relay.example"
-& "$env:LOCALAPPDATA\Programs\SecretRequest\secret-request.cmd" --help
+python -I "<skill目录>\scripts\install.py" --mode public --webhook-env SECRET_REQUEST_WEBHOOK
 & "$env:LOCALAPPDATA\Programs\SecretRequest\secret-request.cmd" --check-service
 ```
 
 macOS / Linux：
 
 ```sh
-python3 -I '<skill目录>/scripts/install.py' --url 'https://your-relay.example'
-~/.local/share/secret-request/secret-request --help
+python3 -I '<skill目录>/scripts/install.py' --mode public --webhook-env SECRET_REQUEST_WEBHOOK
 ~/.local/share/secret-request/secret-request --check-service
 ```
 
-默认使用本机通知。只使用企微 webhook 时，在安装命令增加 `--no-local-notification --webhook-type wecom --webhook-env SECRET_REQUEST_WEBHOOK`，其中变量需在运行客户端的环境里存在。通用 JSON 接收端使用 `--webhook-type generic`。可同时启用本机通知和 webhook；缺少 webhook 配置时只说明设置方法，不自动发送真实群消息。
+初始化后检查入口 `--help` 和 `--check-service`。ready 仅证明匿名服务连接，不创建申请、不发送群消息，不等于实际填写/执行已通过。失败时区别依赖缺失、网络、通知配置和服务协议问题，不重复申请凭据。
 
-Windows 包含 win-x64 通知组件，无需 .NET。macOS 本机通知需要 Apple Command Line Tools，初始化增加 `--build-notifier`；只有 webhook 时可省略。
+## 本机快速启动
 
-安装器自动保存 `~/.config/secret-request/client.json`，内容为服务 URL 和通知设置，并保护文件权限。同一服务可重复初始化；已有配置时可省略 `--url`。已有其他服务地址时报错并保留原配置，需要分开使用时指定独立配置目录。
+执行安装器 `--mode local --port 8787`，在工具的后台进程会话运行安装器输出的 `secret-request-server`（Windows 为 `.cmd`）完整路径，追加 `--port 8787`。保留工具返回的会话 ID，检查同一进程；服务器启动后另开客户端执行 `--check-service`。
 
-## 验证和升级
+服务始终绑定 127.0.0.1，不依赖 Docker/证书。停止用同一会话 Ctrl+C，退出会使未交付申请失效。端口被占用时选择另一端口，并在安装和服务启动命令中保持一致。不要仅根据启动文字判断成功，必须检查 /health 或客户端 --check-service。
 
-`--check-service` 只发健康检查，不创建申请、不通知。`ready` 表示匿名服务可连通；旧版服务返回 `incompatible_service`，应让部署者升级服务。网络失败、私网不可达与本机依赖缺失要分别报告，不能把入口存在当成整条流程已通过。实际通知、网页填写和任务执行留到用户授权的申请中验证。
+本机链接只能在同一电脑打开。企微桌面端可在该电脑浏览器打开；用户要手机填写时切换公共或可达的自建 HTTPS 服务，不要擅自暴露本机端口。
 
-`npx skills update` 后运行当前 skill 的安装器更新环境和入口。0.2 配置会在初始化时保留 URL、通知设置并移除废弃的 request_token；新用户不需要这份旧配置。服务端需先升级到支持匿名接入的 0.3。不要替用户重建或重启已有服务器来修复本机安装问题。
+## 更新与兼容
 
-`--application-directory` 和 `--config-directory` 可选择独立的运行与配置目录，适合隔离测试。移动或删除 skill 会使命令入口引用失效，重新运行当前 skill 的安装器修复入口。
+`npx skills update` 后运行安装器更新环境/入口。省略模式与 URL 时保留原配置；显式指定另一服务会报错并保留旧配置。要并行使用另一模式，指定独立的 `--application-directory` 和 `--config-directory`，不要覆盖已有任务的配置。
+
+`--local-notification` 可选择启用现有 Windows/macOS 通知；macOS 需要 --build-notifier 和 Apple Command Line Tools。当前主流程不依赖原生组件。旧通知配置会保留。0.2 的 request_token 会在升级时移除。
+
+skill 路径变化或被删除会使命令入口失效，重新运行当前 skill 的安装器。安装服务仅适用于当前使用端；不要为了修复本机配置而重启已有中转服务。

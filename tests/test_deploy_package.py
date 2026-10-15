@@ -5,6 +5,7 @@ import stat
 import tarfile
 
 from scripts.package_deploy import package
+from scripts.extract_deploy import source_filter
 
 
 def test_archive_has_readable_files_and_explicit_traversable_parents(tmp_path):
@@ -25,7 +26,7 @@ def test_archive_has_readable_files_and_explicit_traversable_parents(tmp_path):
             destination = tmp_path / "extracted"
             previous = os.umask(0o077)
             try:
-                archive.extractall(destination, filter="data")
+                archive.extractall(destination, filter=source_filter)
             finally:
                 os.umask(previous)
             for name, member in members.items():

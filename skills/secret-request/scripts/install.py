@@ -9,6 +9,24 @@ import subprocess
 import sys
 import tempfile
 
+PUBLIC_URL = 'https://secret-request.eicai.cc'
+
+
+def select_url(mode, url, port, exists):
+    if mode == 'local':
+        if url:
+            raise ValueError('--mode local cannot be combined with --url')
+        if not 1 <= port <= 65535:
+            raise ValueError('Port must be between 1 and 65535')
+        return f'http://127.0.0.1:{port}'
+    if mode == 'public':
+        if url:
+            raise ValueError('--mode public cannot be combined with --url')
+        return PUBLIC_URL
+    if mode == 'custom' and not url:
+        raise ValueError('--mode custom requires --url')
+    return url or (None if exists else PUBLIC_URL)
+
 
 def restrict_access(path):
     if os.name == 'nt':
@@ -80,8 +98,8 @@ def _configure_client(url, destination, python, scripts, local, webhook_type, we
     if url:
         config['url'] = url.rstrip('/')
     if not config.get('url'):
-        raise ValueError('First initialization requires --url https://your-relay.example')
-    notifications = config.setdefault('notifications', {'local': True})
+        config['url'] = PUBLIC_URL
+    notifications = config.setdefault('notifications', {'local': False})
     if not isinstance(notifications, dict):
         raise ValueError('Invalid existing notification configuration')
     if local is not None:
@@ -124,7 +142,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--application-directory', type=Path)
     parser.add_argument('--build-notifier', action='store_true')
-    parser.add_argument('--url', help='HTTPS relay URL; required for first initialization, no token or pairing code')
+    parser.add_argument('--mode', choices=('public', 'local', 'custom'), help='Default: public for new installs, preserve existing service on updates')
+    parser.add_argument('--url', help='Self-hosted HTTPS origin; loopback HTTP is allowed on this computer only')
+    parser.add_argument('--port', type=int, default=8787, help='Local relay port for --mode local')
     parser.add_argument('--config-directory', type=Path, help='Configuration directory; defaults to ~/.config/secret-request')
     local = parser.add_mutually_exclusive_group()
     local.add_argument('--local-notification', dest='local', action='store_true', default=None)
@@ -139,8 +159,7 @@ def main():
                     if os.name == 'nt' else Path.home()/'.local/share/secret-request')
     application = application.resolve()
     config_file = (args.config_directory or Path.home()/'.config/secret-request').resolve()/'client.json'
-    if not config_file.exists() and not args.url:
-        parser.error('First initialization requires --url https://your-relay.example')
+    url = select_url(args.mode, args.url, args.port, config_file.exists())
     application.mkdir(parents=True, exist_ok=True)
     runtime = application/'runtime'
     python = runtime/('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
@@ -150,8 +169,11 @@ def main():
                     '-r',str(scripts/'requirements.txt')], check=True)
     if args.build_notifier:
         subprocess.run([str(python),'-I',str(scripts/'build_native.py')], check=True)
-    configured = configure_client(args.url, config_file, python, scripts, args.local,
-                                  args.webhook_type, args.webhook_env)
+    webhook_env = args.webhook_env
+    if not webhook_env and not config_file.exists() and os.environ.get('SECRET_REQUEST_WEBHOOK'):
+        webhook_env = 'SECRET_REQUEST_WEBHOOK'
+    configured = configure_client(url, config_file, python, scripts, args.local,
+                                  args.webhook_type, webhook_env)
     print('Client configuration saved.' if configured else 'Existing client configuration retained.')
     subprocess.run([str(python),'-I','-X','utf8',str(scripts/'secret_request_cli.py'),'--help'],
                    check=True, stdout=subprocess.DEVNULL)
@@ -166,6 +188,19 @@ def main():
                            shlex.quote(str(scripts/'secret_request_cli.py'))+' --config '+shlex.quote(str(config_file))+' "$@"\n',encoding='utf-8')
         wrapper.chmod(0o700)
     print('Client installed: '+str(wrapper))
+    if os.name == 'nt':
+        server = application/'secret-request-server.cmd'
+        command = '"'+str(python)+'" -I -X utf8 "'+str(scripts/'secret_request_server.py')+'" --local'
+        server.write_text('@echo off\n'+command.replace('%','%%')+' %*\n', encoding='utf-8')
+    else:
+        server = application/'secret-request-server'
+        server.write_text('#!/bin/sh\nexec '+shlex.quote(str(python))+' -I -X utf8 '+
+                          shlex.quote(str(scripts/'secret_request_server.py'))+' --local "$@"\n', encoding='utf-8')
+        server.chmod(0o700)
+    if url and url.startswith('http://127.0.0.1:'):
+        print('Start the local relay in a background tool session: '+str(server)+' --port '+str(args.port))
+    if not webhook_env and not config_file.exists():
+        print('Configure a WeCom webhook before requesting input, or use --show-link for a local request.')
 
 
 if __name__ == '__main__':

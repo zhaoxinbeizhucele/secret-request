@@ -1,0 +1,50 @@
+<!doctype html>
+<!-- DIRECTION CONTRACT: operate; a recipient responds to a short-lived agent request.
+WORLD: familiar system approval sheet, quiet light/dark surface, no decorative assets.
+FIRST VIEWPORT: request name, declared agent, purpose and deadline above labelled fields.
+FORM: one request, submit or decline; entry links carry per-request permission. -->
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta name="color-scheme" content="light dark">
+  <title>机密输入请求</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <script type="module" src="/assets/app.js"></script>
+</head>
+<body>
+  <main>
+    <h1 id="title">机密输入请求</h1>
+    <p id="status" role="status" aria-live="polite">正在检查请求…</p>
+    <section id="request" hidden aria-label="请求详情">
+      <dl>
+        <div><dt>申请 Agent</dt><dd id="agent"></dd></div>
+        <div><dt>申请时间</dt><dd id="created"></dd></div>
+        <div><dt>本次用途</dt><dd id="purpose"></dd></div>
+        <div><dt>剩余时间</dt><dd id="remaining"></dd></div>
+      </dl>
+      <form id="form" hidden novalidate>
+        <div id="fields"></div>
+        <div id="legacy-field">
+        <label id="secret-label" for="secret">输入本次提供的机密</label>
+        <div class="input-wrap">
+          <input id="secret" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="65536" aria-describedby="hint">
+          <button type="button" id="visibility" class="quiet" aria-pressed="false">显示</button>
+        </div>
+        <textarea id="multiline-secret" hidden rows="5" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="65536" aria-label="多行机密内容" aria-describedby="hint"></textarea>
+        <label class="check"><input id="multiline" type="checkbox">多行内容（明文显示）</label>
+        </div>
+        <p id="hint" class="secondary">只用于这次请求。提交后会清空输入框。</p>
+        <p id="error" role="alert" hidden></p>
+        <div class="actions">
+          <button id="submit" type="submit">提交本次机密</button>
+          <button id="decline" type="button" class="secondary-button">拒绝请求</button>
+        </div>
+      </form>
+      <p id="close-hint" hidden role="status">已提交并清空输入。若浏览器未自动关闭，请关闭此标签页。</p>
+    </section>
+    <p class="footer">由你选择并提供机密，无需连接密码管理器。</p>
+  </main>
+</body>
+</html>

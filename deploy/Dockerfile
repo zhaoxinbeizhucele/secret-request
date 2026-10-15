@@ -9,4 +9,5 @@ RUN chmod -R a+rX /app/secret_request
 USER 10001:10001
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 SECRET_REQUEST_CONFIG=/run/config/relay.json
 EXPOSE 8787
-CMD ["python", "-m", "uvicorn", "secret_request.relay:from_environment", "--factory", "--host", "0.0.0.0", "--port", "8787", "--workers", "1", "--no-proxy-headers", "--no-access-log", "--log-level", "warning"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8787/health', timeout=3)"]
+CMD ["python", "-m", "secret_request.server"]

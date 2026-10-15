@@ -25,7 +25,8 @@ def load_config(path: Path, allow_local_http=False) -> dict:
         raise ValueError("invalid client configuration")
     parts = urlsplit(config["url"])
     local = parts.hostname in {"localhost", "127.0.0.1", "::1", "testserver"}
-    if parts.scheme != "https" and not (allow_local_http and local):
+    loopback = parts.hostname in {"localhost", "127.0.0.1", "::1"}
+    if parts.scheme != "https" and not (parts.scheme == "http" and (loopback or (allow_local_http and local))):
         raise ValueError("HTTPS required")
     if not parts.hostname or parts.username or parts.password or parts.query or parts.fragment or parts.path not in {"", "/"}:
         raise ValueError("invalid service URL")

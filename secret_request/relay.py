@@ -141,12 +141,16 @@ def create_app(settings: Settings, clock=time.monotonic):
                 response = JSONResponse({"error": "json_required"}, status_code=415)
             else:
                 chunks, size = [], 0
-                async for chunk in request.stream():
-                    size += len(chunk)
-                    if size > 100000:
-                        response = JSONResponse({"error": "request_too_large"}, status_code=413)
-                        break
-                    chunks.append(chunk)
+                try:
+                    async with asyncio.timeout(15):
+                        async for chunk in request.stream():
+                            size += len(chunk)
+                            if size > 100000:
+                                response = JSONResponse({"error": "request_too_large"}, status_code=413)
+                                break
+                            chunks.append(chunk)
+                except TimeoutError:
+                    response = JSONResponse({"error": "request_timeout"}, status_code=408)
                 if response is None:
                     request._body = b"".join(chunks)
         response = response if response is not None else await call_next(request)
@@ -261,13 +265,16 @@ def create_app(settings: Settings, clock=time.monotonic):
             return {"envelope": envelope}
 
     @app.get("/")
+    async def home():
+        return FileResponse(ROOT / "web/home.html")
+
     @app.get("/input/{rid}")
     async def page(rid: str = ""):
         return FileResponse(ROOT / "web/index.html")
 
     @app.get("/assets/{name}")
     async def asset(name: str):
-        if name not in {"app.js", "style.css", "crypto.js"}:
+        if name not in {"app.js", "style.css", "crypto.js", "home.css", "home.js"}:
             raise HTTPException(404)
         return FileResponse(ROOT / "web" / name)
 
@@ -275,5 +282,12 @@ def create_app(settings: Settings, clock=time.monotonic):
 
 
 def from_environment():
-    config = json.loads(Path(os.environ["SECRET_REQUEST_CONFIG"]).read_text(encoding="utf-8-sig"))
+    if os.environ.get("SECRET_REQUEST_BASE_URL"):
+        config = {"base_url": os.environ["SECRET_REQUEST_BASE_URL"]}
+        for name in ("max_requests", "max_requests_per_ip", "requests_per_minute", "global_requests_per_minute"):
+            value = os.environ.get("SECRET_REQUEST_" + name.upper())
+            if value is not None:
+                config[name] = int(value)
+    else:
+        config = json.loads(Path(os.environ["SECRET_REQUEST_CONFIG"]).read_text(encoding="utf-8-sig"))
     return create_app(Settings(**config))

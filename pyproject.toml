@@ -10,6 +10,7 @@ dependencies = ["fastapi==0.141.1", "uvicorn==0.38.0", "httpx==0.28.1", "cryptog
 
 [project.scripts]
 secret-request = "secret_request.client:main"
+secret-request-server = "secret_request.server:main"
 
 [tool.setuptools.packages.find]
 include = ["secret_request*"]
