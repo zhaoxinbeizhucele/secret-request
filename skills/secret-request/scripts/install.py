@@ -199,8 +199,6 @@ def main():
         server.chmod(0o700)
     if url and url.startswith('http://127.0.0.1:'):
         print('Start the local relay in a background tool session: '+str(server)+' --port '+str(args.port))
-    if not webhook_env and not config_file.exists():
-        print('Configure a WeCom webhook before requesting input, or use --show-link for a local request.')
 
 
 if __name__ == '__main__':

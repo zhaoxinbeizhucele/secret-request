@@ -5,7 +5,7 @@ services:
     restart: unless-stopped
     environment:
       SECRET_REQUEST_BASE_URL: https://${SECRET_REQUEST_DOMAIN:?Set SECRET_REQUEST_DOMAIN in .env}
-      FORWARDED_ALLOW_IPS: '*'
+      FORWARDED_ALLOW_IPS: ${RELAY_PROXY_ADDRESS:-172.30.80.3}
     networks: [relay]
     read_only: true
     tmpfs: ['/tmp:size=16m,mode=1777']
@@ -25,7 +25,10 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
       - caddy-config:/config
-    networks: [relay, edge]
+    networks:
+      relay:
+        ipv4_address: ${RELAY_PROXY_ADDRESS:-172.30.80.3}
+      edge: {}
     depends_on:
       relay: {condition: service_healthy}
     mem_limit: 128m
@@ -33,7 +36,11 @@ services:
     logging:
       options: {max-size: 5m, max-file: '2'}
 networks:
-  relay: {internal: true}
+  relay:
+    internal: true
+    ipam:
+      config:
+        - subnet: ${RELAY_SUBNET:-172.30.80.0/29}
   edge: {}
 volumes:
   caddy-data: {}
