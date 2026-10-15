@@ -7,7 +7,7 @@ import subprocess
 import sys
 import threading
 import time
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 import httpx
 
@@ -47,8 +47,11 @@ def validate_notifications(value, allow_local_http=False):
                        not re.fullmatch(r"[A-Za-z0-9-]{1,64}", k) or any(c in v for c in "\r\n") or
                        k.lower() in {"host", "content-length", "content-type"} for k, v in headers.items())):
             raise ValueError("invalid webhook headers")
-        if hook["type"] == "wecom" and (parts.hostname != "qyapi.weixin.qq.com" or parts.path != "/cgi-bin/webhook/send"):
-            raise ValueError("invalid WeCom webhook")
+        if hook["type"] == "wecom":
+            keys = parse_qs(parts.query, keep_blank_values=True).get('key', [])
+            if (parts.hostname != "qyapi.weixin.qq.com" or parts.port not in {None, 443}
+                    or parts.path != "/cgi-bin/webhook/send" or len(keys) != 1 or not keys[0]):
+                raise ValueError("invalid WeCom webhook")
         result["webhook"] = {"type": hook["type"], "url": url, "headers": headers}
     return result
 

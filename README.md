@@ -14,7 +14,7 @@ npx skills add zhaoxinbeizhucele/secret-request -g
 
 > 初始化 secret-request，使用默认公共服务，通过企微 webhook 通知我。
 
-`npx skills add` 只分发文件，不会执行安装器。Agent 会建立独立 Python 环境、生成配置并检查连接。需要 Node.js 22.20+ 和 Python 3.12+。完整企微 webhook 属于机密，通过受保护网页交给配置程序，或复用已存在的 `SECRET_REQUEST_WEBHOOK` 环境变量，不要粘贴进聊天。
+`npx skills add` 只分发文件，不会执行安装器。Agent 会建立独立 Python 环境、生成配置并检查连接。需要 Node.js 22.20+ 和 Python 3.12+。完整企微 webhook 属于机密。没有现成环境变量时，安装命令加 `--configure-wecom`，会打开加密填写网页并交给本机配置程序；也可复用已存在的 `SECRET_REQUEST_WEBHOOK` 环境变量，不要粘贴进聊天。
 
 首次初始化可选择：
 
@@ -31,18 +31,18 @@ npx skills add zhaoxinbeizhucele/secret-request -g
 Windows（`<skill目录>` 为当前安装位置）：
 
 ```powershell
-python -I "<skill目录>\scripts\install.py" --mode public --webhook-env SECRET_REQUEST_WEBHOOK
+python -I "<skill目录>\scripts\install.py" --mode public --configure-wecom
 & "$env:LOCALAPPDATA\Programs\SecretRequest\secret-request.cmd" --check-service
 ```
 
 macOS / Linux：
 
 ```sh
-python3 -I '<skill目录>/scripts/install.py' --mode public --webhook-env SECRET_REQUEST_WEBHOOK
+python3 -I '<skill目录>/scripts/install.py' --mode public --configure-wecom
 ~/.local/share/secret-request/secret-request --check-service
 ```
 
-企微为优先通知方式，本机通知默认关闭。已有 `SECRET_REQUEST_WEBHOOK` 时，新安装自动引用；也可用 `--webhook-env` 指定其他变量名。变量需在客户端进程环境中可用。仅将变量名写入配置，完整 webhook 不进入日志或仓库。旧版已保存的通知设置继续沿用。
+企微为优先通知方式，本机通知默认关闭。`--configure-wecom` 不依赖已有通知渠道：公共/自建模式使用当前选中的中转并打开一次性填写页，本机模式临时启动 loopback 配置页。提交后地址保存到受保护的本机配置；拒绝或过期保留原配置，不发送群消息。没有桌面浏览器时可直接运行 `scripts/setup_wecom.py --config <client.json> --no-open` 获得填写链接；loopback 链接仍仅限同电脑。填写后通过原工具进程状态确认 `wecom_configured`，不要要求用户回聊天确认。已有 `SECRET_REQUEST_WEBHOOK` 时，新安装自动引用；也可用 `--webhook-env` 指定其他变量名。变量需在客户端进程环境中可用。仅将变量名写入配置，完整 webhook 不进入日志或仓库。旧版已保存的通知设置继续沿用。
 
 Windows/macOS 本机通知仍可通过 `--local-notification` 显式开启；macOS 需 Apple Command Line Tools 和 `--build-notifier`。Linux 使用 webhook。通用 JSON webhook 保留兼容，当前主流程只要求企微。
 

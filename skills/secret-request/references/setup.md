@@ -10,19 +10,19 @@
 - 本机：`--mode local --port 8787`，无需 Docker、域名或部署，只能本机浏览器填写。
 - 自建 HTTPS：`--mode custom --url https://relay.example.com`；部署方法见仓库 README 的“部署中转服务”。
 
-默认只要求企微 webhook，本机通知关闭。复用已有的 `SECRET_REQUEST_WEBHOOK` 或用 `--webhook-env NAME` 指定其他变量名。没有可用 webhook 时，通过安全凭据申请流程交给本机配置程序，不让用户在聊天发送完整地址。配置程序可将 webhook 写入受保护的 `client.json` 的 `notifications.webhook.url`，并设置 type 为 wecom；不要输出地址。环境变量方式只写入变量名，客户端每次运行均需能读到该变量。
+默认只要求企微 webhook，本机通知关闭。复用已有的 `SECRET_REQUEST_WEBHOOK` 或用 `--webhook-env NAME` 指定其他变量名。没有可用 webhook 时，在安装命令增加 `--configure-wecom`。它使用选定的中转打开一次性加密填写页，地址只通过 stdin 交给本机配置程序并保存在受保护配置中；本机模式会临时拉起仅 loopback 的配置页，无需事先启动服务器。没有浏览器时直接用独立运行环境的 Python 执行 `scripts/setup_wecom.py --config <client.json> --no-open`，把填写链接提供给用户（本机链接仅同电脑可用）。此入口专用于首次配置，无需先有可用通知渠道。拒绝/过期不覆盖原配置；保存不发送群消息。不要让用户在聊天发送完整地址，也不要要求用户回聊天说填完了，继续跟踪同一工具会话，直到 wecom_configured 或明确失败。环境变量方式只写入变量名，客户端每次运行均需能读到该变量。
 
 Windows：
 
 ```powershell
-python -I "<skill目录>\scripts\install.py" --mode public --webhook-env SECRET_REQUEST_WEBHOOK
+python -I "<skill目录>\scripts\install.py" --mode public --configure-wecom
 & "$env:LOCALAPPDATA\Programs\SecretRequest\secret-request.cmd" --check-service
 ```
 
 macOS / Linux：
 
 ```sh
-python3 -I '<skill目录>/scripts/install.py' --mode public --webhook-env SECRET_REQUEST_WEBHOOK
+python3 -I '<skill目录>/scripts/install.py' --mode public --configure-wecom
 ~/.local/share/secret-request/secret-request --check-service
 ```
 

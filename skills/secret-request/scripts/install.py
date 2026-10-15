@@ -8,6 +8,7 @@ import shlex
 import subprocess
 import sys
 import tempfile
+from urllib.parse import urlsplit
 
 PUBLIC_URL = 'https://secret-request.eicai.cc'
 
@@ -70,12 +71,12 @@ def configuration_lock(directory):
                 fcntl.flock(handle, fcntl.LOCK_UN)
 
 
-def configure_client(url, destination, python, scripts, local=None, webhook_type='wecom', webhook_env=None):
+def configure_client(url, destination, python, scripts, local=None, webhook_type='wecom', webhook_env=None, *, webhook_url=None):
     with configuration_lock(destination.parent):
-        return _configure_client(url, destination, python, scripts, local, webhook_type, webhook_env)
+        return _configure_client(url, destination, python, scripts, local, webhook_type, webhook_env, webhook_url)
 
 
-def _configure_client(url, destination, python, scripts, local, webhook_type, webhook_env):
+def _configure_client(url, destination, python, scripts, local, webhook_type, webhook_env, webhook_url):
     previous = None
     config = {}
     if destination.exists():
@@ -106,6 +107,10 @@ def _configure_client(url, destination, python, scripts, local, webhook_type, we
         notifications['local'] = local
     if webhook_env:
         notifications['webhook'] = {'type': webhook_type, 'url_env': webhook_env}
+    if webhook_url is not None:
+        if webhook_env:
+            raise ValueError('Choose one webhook input method')
+        notifications['webhook'] = {'type': webhook_type, 'url': webhook_url}
     content = json.dumps(config, ensure_ascii=False, indent=2).encode('utf-8')
     if not destination.parent.exists():
         destination.parent.mkdir(parents=True, mode=0o700)
@@ -151,7 +156,10 @@ def main():
     local.add_argument('--no-local-notification', dest='local', action='store_false')
     parser.add_argument('--webhook-type', choices=('wecom', 'generic'), default='wecom')
     parser.add_argument('--webhook-env', help='Name of an existing environment variable containing the webhook URL')
+    parser.add_argument('--configure-wecom', action='store_true', help='Open a temporary loopback page to enter a WeCom webhook privately')
     args = parser.parse_args()
+    if args.configure_wecom and args.webhook_env:
+        parser.error('Choose --configure-wecom or --webhook-env')
     if sys.version_info < (3,12):
         parser.error('Python 3.12 or newer is required')
     scripts = Path(__file__).resolve().parent
@@ -170,7 +178,7 @@ def main():
     if args.build_notifier:
         subprocess.run([str(python),'-I',str(scripts/'build_native.py')], check=True)
     webhook_env = args.webhook_env
-    if not webhook_env and not config_file.exists() and os.environ.get('SECRET_REQUEST_WEBHOOK'):
+    if not webhook_env and not args.configure_wecom and not config_file.exists() and os.environ.get('SECRET_REQUEST_WEBHOOK'):
         webhook_env = 'SECRET_REQUEST_WEBHOOK'
     configured = configure_client(url, config_file, python, scripts, args.local,
                                   args.webhook_type, webhook_env)
@@ -199,11 +207,17 @@ def main():
         server.chmod(0o700)
     if url and url.startswith('http://127.0.0.1:'):
         print('Start the local relay in a background tool session: '+str(server)+' --port '+str(args.port))
+    if args.configure_wecom:
+        command = [str(python), '-I', '-X', 'utf8', str(scripts/'setup_wecom.py'), '--config', str(config_file)]
+        service = json.loads(config_file.read_text(encoding='utf-8-sig'))['url']
+        if urlsplit(service).hostname in {'localhost', '127.0.0.1', '::1'}:
+            command.append('--local')
+        return subprocess.run(command).returncode
 
 
 if __name__ == '__main__':
     try:
-        main()
+        raise SystemExit(main() or 0)
     except (OSError, ValueError, subprocess.CalledProcessError) as error:
         # Subprocess/config contents can include capabilities; report only controlled failures.
         message = str(error) if isinstance(error, ValueError) else 'Client installation failed.'

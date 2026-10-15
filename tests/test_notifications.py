@@ -52,7 +52,11 @@ def test_rejected_webhook_is_failed_without_exposing_content(response):
     {'webhook':{'type':'generic','url':'http://hook.test'}},
     {'webhook':{'type':'generic','url':'https://user:password@hook.test'}},
     {'webhook':{'type':'generic','url':'https://hook.test','headers':{'Authorization':'x\r\ny'}}},
-    {'webhook':{'type':'wecom','url':'https://hook.test'}}])
+    {'webhook':{'type':'wecom','url':'https://hook.test'}},
+    {'webhook':{'type':'wecom','url':'https://qyapi.weixin.qq.com/cgi-bin/webhook/send'}},
+    {'webhook':{'type':'wecom','url':'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key='}},
+    {'webhook':{'type':'wecom','url':'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=x&key=y'}},
+    {'webhook':{'type':'wecom','url':'https://qyapi.weixin.qq.com:8443/cgi-bin/webhook/send?key=x'}}])
 def test_invalid_notification_configuration(value):
     with pytest.raises(ValueError): n.validate_notifications(value)
 

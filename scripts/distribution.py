@@ -28,7 +28,7 @@ def server_files(root):
 
 def client_files(root):
     names = ['SKILL.md', 'references/setup.md', 'references/troubleshooting.md',
-             'scripts/install.py', 'scripts/build_native.py', 'scripts/secret_request_cli.py',
+             'scripts/install.py', 'scripts/install.ps1', 'scripts/setup_wecom.py', 'scripts/build_native.py', 'scripts/secret_request_cli.py',
              'scripts/secret_request_server.py', 'scripts/requirements.txt', 'scripts/constraints.txt']
     names += ['scripts/secret_request/'+name for name in MODULES]
     names += ['scripts/secret_request/web/'+name for name in WEB_FILES]
