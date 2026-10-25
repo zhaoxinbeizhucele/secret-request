@@ -4,7 +4,7 @@
 
 ## 实现
 
-- 默认公共地址 https://secret-request.eicai.cc；更新保留已有配置，另一服务采用独立应用/配置目录。
+- 默认公共地址 https://sr.eicai.cc；更新保留已有配置，另一服务采用独立应用/配置目录。生产环境使用 `SECRET_REQUEST_DOMAIN=sr.eicai.cc`、`SECRET_REQUEST_BASE_URL=https://sr.eicai.cc`。下文里的 secret-request.eicai.cc 是当时的部署记录。
 - 本机服务器仅监听 127.0.0.1，安装器提供独立客户端和服务器入口。停止前台/工具会话进程即可关闭，不创建系统常驻服务。
 - 公网 Compose 自动 HTTPS（Caddy）与已有 HTTPS 反代两种替代方案；代理覆盖来源头，relay 限制连接并发、请求体大小与读取时间。
 - 根路径官网和申请页分离。官网支持复制命令、深色模式、桌面及窄屏。

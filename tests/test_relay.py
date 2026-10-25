@@ -174,8 +174,8 @@ def test_health_reports_anonymous_protocol(system):
 
 
 def test_published_input_link_lengths():
-    assert len("https://secret-request.eicai.cc/input/" + "a" * 24 + "#" + "b" * 43) == 106
-    assert len("https://secret-request.eicai.cc/i#" + "c" * 22) == 56
+    assert len("https://sr.eicai.cc/input/" + "a" * 24 + "#" + "b" * 43) == 94
+    assert len("https://sr.eicai.cc/i#" + "c" * 22) == 44
     assert len("https://sr.eicai.cc/#" + "c" * 22) == 43
 
 

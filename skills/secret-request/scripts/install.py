@@ -10,7 +10,7 @@ import sys
 import tempfile
 from urllib.parse import urlsplit
 
-PUBLIC_URL = 'https://secret-request.eicai.cc'
+PUBLIC_URL = 'https://sr.eicai.cc'
 
 
 def select_url(mode, url, port, exists):
