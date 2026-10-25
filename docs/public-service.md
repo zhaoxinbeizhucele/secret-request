@@ -4,7 +4,7 @@
 
 ## 实现
 
-- 默认公共地址 https://sr.eicai.cc；更新保留已有配置，另一服务采用独立应用/配置目录。生产环境使用 `SECRET_REQUEST_DOMAIN=sr.eicai.cc`、`SECRET_REQUEST_BASE_URL=https://sr.eicai.cc`。下文里的 secret-request.eicai.cc 是当时的部署记录。
+- 唯一仍解析的公共域名是 https://sr.eicai.cc。更新保留已有配置，另一服务采用独立应用/配置目录。生产环境使用 `SECRET_REQUEST_DOMAIN=sr.eicai.cc`、`SECRET_REQUEST_BASE_URL=https://sr.eicai.cc`。旧主机名 secret-request.eicai.cc 已停用，DNS 不再解析；不要用于客户端 `url`、健康检查或回退。已保存且仍指向该主机名的配置要改成 `https://sr.eicai.cc`，安装器不会改写已有配置。下文出现的旧主机名只是 2026-10-15 的停用记录。
 - 本机服务器仅监听 127.0.0.1，安装器提供独立客户端和服务器入口。停止前台/工具会话进程即可关闭，不创建系统常驻服务。
 - 公网 Compose 自动 HTTPS（Caddy）与已有 HTTPS 反代两种替代方案；代理覆盖来源头，relay 限制连接并发、请求体大小与读取时间。
 - 根路径官网和申请页分离。官网支持复制命令、深色模式、桌面及窄屏。
@@ -21,14 +21,14 @@
 
 ## 外部交付
 
-2026-10-15，已完成下列实时验证：
+2026-10-15，已完成下列实时验证。当时的公网检查指向现已停用的 secret-request.eicai.cc；该名不再解析，不要重跑这些检查，也不要把它当作当前健康检查或回退目标。
 
 - Actions [38678459172](https://github.com/zhaoxinbeizhucele/secret-request/actions/runs/38678459172) 成功，Linux 162 passed、2 skipped（浏览器相关模块缺少 Playwright，Windows 另行覆盖）。生成 amd64/arm64 镜像，GHCR 包为 public；无登录主机实际从 GHCR 拉取成功。
 - 部署代码提交 139b8f0cefced66dad696a42eeb3a607918aa6c1。镜像索引 digest 为 sha256:9717a0955c3dd6db08d5d0474d5127701b0bb6733d283afa022fda2761f8a4d9，实际 amd64 image ID 为 sha256:93bdb3f46366579ed532611c498c239faa1aa55fa4f745f26ce90888a8ad2c68。
 - 目标机直连 GHCR 较慢；在已有 dmit-pro 主机按上述 digest 拉取，经 SSH 流式传输到目标机。目标 image ID 相同，未本地重建或换源。
-- DNSPod 新增 secret-request.eicai.cc A → 159.75.138.202（TTL 600，记录 ID 2430811130）；随后系统解析读回一致。只新增本子域名记录。
+- 【已停用】2026-10-15 曾在 DNSPod 新增 secret-request.eicai.cc A → 159.75.138.202（TTL 600，记录 ID 2430811130），当时系统解析读回一致，且只新增过这一条子域名记录。该记录已退役，主机名不再解析。
 - ssh eicai.cc → VM-12-9-debian，/home/zhaox/dockerApp/secret-request，Compose 项目 secret-request-public；容器 UID 10001、只读根文件系统、仅 127.0.0.1:8787 发布，健康状态 healthy。
-- 新增 /etc/nginx/conf.d/secret-request.eicai.cc.conf，复用现有 *.eicai.cc 证书；nginx -t 通过后平滑 reload。旧容器 ID 与核对前一致。站点禁用访问日志，有请求/连接限流和超时。
+- 【已停用】同期新增 /etc/nginx/conf.d/secret-request.eicai.cc.conf，复用现有 *.eicai.cc 证书；当时 nginx -t 通过后平滑 reload。旧容器 ID 与核对前一致。站点禁用访问日志，有请求/连接限流和超时。该虚拟主机随主机名停用，公网只使用 sr.eicai.cc。
 - 公网 HTTPS /health、首页、首页 JS/CSS、输入页及所有输入页资源读回通过。
 - 从 GitHub 实际 npx skills add 到隔离项目，使用下载的安装器和独立 Python 环境。默认无 URL 初始化后 --check-service 为 ready，pip check 通过；本机模式从生成的入口实际启动，完成同机加密/解密/执行/300 秒会话/撤销；停止后监听端口消失。
 - 下载的客户端连接公网服务，通过实际浏览器填写虚构多字段值，成功解密交付给任务并撤销会话。首次探针对原始 JSON 字节按 Python 格式化结果作比较，因浏览器紧凑 JSON 而失败；改为比较 JSON 字段内容后通过，产品保持原字节未改变。提交后的 Edge 扩展浮层阻挡状态观察，因此本轮不声称公网真人关页验收已通过。
@@ -41,6 +41,7 @@
 
 ## 运维与回退
 
+- 公共域名只有 https://sr.eicai.cc。secret-request.eicai.cc 已停用且 DNS 不再解析；健康检查、客户端配置和站点回退都不要依赖旧名。
 - 本站未购买资源，复用现有主机、域名和通配证书（核对有效期至 2026-11-13）。证书续期沿用该机现有管理流程。
 - 当前使用固定提交标签，更新先 pull 目标 SHA/digest，再 docker compose --env-file .env -f compose.yaml up -d --wait。保留上个标签即可回退，重启前的未交付申请会失效。
 - 站点回退：只撤下本项目独立 Nginx 配置并通过 nginx -t 后 reload，停止本项目 Compose。不要停止或修改其他站点/容器。
