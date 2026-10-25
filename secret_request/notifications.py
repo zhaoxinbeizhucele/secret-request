@@ -16,10 +16,14 @@ NATIVE = Path(__file__).resolve().parent / "native"
 _native_short_links = None
 
 
+def current_platform():
+    return sys.platform
+
+
 def native_helper():
-    if sys.platform == "win32":
+    if current_platform() == "win32":
         return NATIVE / "windows/SecretRequest.Notify.exe"
-    if sys.platform == "darwin":
+    if current_platform() == "darwin":
         return NATIVE / "macos/SecretRequestNotify.app/Contents/MacOS/SecretRequestNotify"
     return None
 
@@ -127,7 +131,7 @@ def local_notification(message):
     if helper is None:
         return "unsupported", None
     command = [str(helper)]
-    if sys.platform == "darwin":
+    if current_platform() == "darwin":
         process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                    stderr=subprocess.DEVNULL, start_new_session=True)
         try:
@@ -167,7 +171,7 @@ class Delivery(dict):
                 if self.process.poll() is None:
                     self.process.terminate()
                     self.process.wait(timeout=5)
-            elif sys.platform == "win32" and self.local_attempted:
+            elif current_platform() == "win32" and self.local_attempted:
                 subprocess.run([str(NATIVE / "windows/SecretRequest.Notify.exe"), "--clear"],
                                input=json.dumps(self.message).encode("utf-8"), timeout=5,
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,

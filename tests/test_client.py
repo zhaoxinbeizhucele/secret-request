@@ -145,8 +145,11 @@ def test_short_link_follows_native_helper_capability(system, tmp_path, monkeypat
             return subprocess.CompletedProcess(command, 0)
         raise AssertionError("unexpected helper command: " + repr(command))
 
-    # Force the Windows cleanup path so Linux CI runs the same --clear call.
-    monkeypatch.setattr(notifications.sys, "platform", "win32")
+    # Cover Windows --clear on Linux without changing sys.platform. shutil.which
+    # follows that global and would miss an extensionless sys.executable.
+    platform = sys.platform
+    monkeypatch.setattr(notifications, "current_platform", lambda: "win32")
+    assert sys.platform == platform
     monkeypatch.setattr(notifications.subprocess, "CREATE_NO_WINDOW", 0x08000000, raising=False)
     monkeypatch.setattr(notifications, "native_helper", helper_path)
     monkeypatch.setattr(notifications.subprocess, "run", run_helper)
