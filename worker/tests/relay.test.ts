@@ -1,6 +1,6 @@
 import { beforeEach, afterAll, beforeAll, test, expect } from "vitest";
 import { fixture } from "../../scripts/worker_fixture.mjs";
-import { createBody, validEnvelope, validJwk } from "../schema";
+import { createBody, decode, validEnvelope, validJwk } from "../schema";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -75,7 +75,7 @@ test("request-time expiry and alarm physically clear envelope, rows, indexes, ra
   await control("reset"); const b = await create(); await req(`/api/requests/${b.id}/submit`, "POST", envelope, b.submit);
   await sql("UPDATE requests SET deadline=?", Date.now()-100); await control("alarm");
   dump = await control("inspect"); expect(dump.rows[0].state).toBe("expired"); expect(dump.rows[0].envelope).toBeNull();
-  await sql("UPDATE requests SET deadline=?", Date.now()-600001); await sql("UPDATE rates SET at=?", Date.now()-60001); await control("alarm");
+  await sql("UPDATE requests SET terminal_at=?", Date.now()-60001); await sql("UPDATE rates SET at=?", Date.now()-60001); await control("alarm");
   dump = await control("inspect"); expect(dump.rows).toHaveLength(0); expect(dump.rates).toHaveLength(0); expect(dump.alarm).toBeNull();
   expect((await req("/api/input", "GET", undefined, b.submit)).status).toBe(404);
 });
@@ -106,15 +106,7 @@ test("global create rate and active capacity limits", async () => {
   await sql("DELETE FROM rates"); for(let i=0;i<8;i++) await create(`198.51.100.${i}`);
   expect((await req("/api/requests","POST",{name:"Test",purpose:"Test",public_key:jwk},undefined,"198.51.100.99")).status).toBe(429);
 });
-test("total record bound includes terminal entries", async () => {
-  for(let batch=0;batch<5;batch++) {
-    const amount=batch===4?32:120;
-    for(let i=0;i<amount;i++) { const c=await create(`192.0.2.${i}`); await req(`/api/requests/${c.id}/cancel`,"POST",{},c.receive_token); }
-    await sql("DELETE FROM rates");
-  }
-  expect((await control("inspect")).rows).toHaveLength(512);
-  expect((await req("/api/requests","POST",{name:"Test",purpose:"Test",public_key:jwk})).status).toBe(429);
-});
+
 test("input lookup rate applies to malformed bearer and is source isolated", async () => {
   for(let i=0;i<120;i++) expect((await req("/api/input","GET",undefined,"bad")).status).toBe(404);
   expect((await req("/api/input")).status).toBe(429); expect((await req("/api/input","GET",undefined,"bad","192.0.2.2")).status).toBe(404);
@@ -171,3 +163,253 @@ test.each([
 ])("invalid create schema %#",body=>expect(createBody(body)).toBeNull());
 test.each([{}, {...jwk, d:"private"}, {...jwk,e:"Aw"}, {...jwk,n:"a"}, {...jwk,n:Buffer.alloc(384,1).toString("base64url")}, {...jwk,n:n+"!"}])("invalid JWK %#",key=>expect(validJwk(key)).toBe(false));
 test.each([{}, {...envelope,v:true}, {...envelope,v:2}, {...envelope,nonce:"short"}, {...envelope,wrapped_key:"a"}, {...envelope,ciphertext:Buffer.alloc(16).toString("base64url")}, {...envelope,ciphertext:Buffer.alloc(65553).toString("base64url")}, {...envelope,extra:1}])("invalid envelope %#",value=>expect(validEnvelope(value)).toBe(false));
+
+async function measurement() { return (await req("/__test/metrics")).json() as Promise<any>; }
+async function measured(run: () => Promise<unknown>) {
+  await control("metrics"); await run(); return measurement();
+}
+
+test("SQL measurement consumes the entire cursor before reading rowsRead", async () => {
+  const m = await measured(() => control("measure", {query:"WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<37) SELECT x FROM n"}));
+  expect(m.queries).toHaveLength(1); expect(m.rowsRead).toBeGreaterThanOrEqual(37);
+});
+
+test("complete requests stay bounded at 61440 input rates and 640 active/terminal requests", async () => {
+  const c = await create();
+  const [{source}] = await sql("SELECT source FROM requests WHERE id=?", c.id);
+  const at = Date.now();
+  await sql("DELETE FROM rates");
+  await sql(`WITH RECURSIVE s(i) AS (VALUES(0) UNION ALL SELECT i+1 FROM s WHERE i<511),
+    r(j) AS (VALUES(0) UNION ALL SELECT j+1 FROM r WHERE j<119)
+    INSERT INTO rates SELECT 'input', CASE WHEN i=0 THEN ? ELSE 'seed-'||i END,
+    CASE WHEN i=0 AND j=0 THEN ? ELSE ? END FROM s CROSS JOIN r`, source, at-61000, at);
+  await sql("INSERT INTO input_sources SELECT source, MAX(at) FROM rates GROUP BY source");
+  await sql(`WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<512)
+    INSERT INTO requests SELECT 'seed-'||i, 'source-'||i, 'submit-'||i, 'receive-'||i, deadline, 'consumed', data, NULL, ? FROM n CROSS JOIN requests WHERE id=?`, at, c.id);
+  await sql(`WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<127)
+    INSERT INTO requests SELECT 'active-'||i, 'active-source-'||i, 'active-submit-'||i, 'active-receive-'||i, deadline, 'pending', data, NULL, NULL FROM n CROSS JOIN requests WHERE id=?`, c.id);
+  expect((await sql("SELECT COUNT(*) n FROM rates"))[0].n).toBe(61440);
+  expect((await sql("SELECT COUNT(*) n FROM requests"))[0].n).toBe(640);
+  const results: Record<string, any> = {};
+  results.legal = await measured(async () => expect((await req("/api/input", "GET", undefined, c.submit)).status).toBe(200));
+  results.limited = await measured(async () => expect((await req("/api/input", "GET", undefined, c.submit)).status).toBe(429));
+  results.newSource = await measured(async () => expect((await req("/api/input", "GET", undefined, c.submit, "203.0.113.99")).status).toBe(429));
+  results.create = await measured(async () => expect((await req("/api/requests", "POST", {name:"x",purpose:"x",public_key:jwk})).status).toBe(429));
+  await sql("DELETE FROM requests WHERE id='active-127'");
+  results.createAllowed = await measured(() => create("203.0.113.88"));
+  for (const m of Object.values(results)) {
+    expect(m.rowsRead).toBeLessThan(2048); expect(m.doAccesses).toBe(1); expect(m.doFetches).toBe(1);
+    expect(m.alarmWrites).toBe(0); expect(m.alarmDeletes).toBe(0);
+    expect(m.queries.every((q: any) => !q.query.includes("DISTINCT") && !q.query.includes("UNION"))).toBe(true);
+  }
+  for (const [path, method, status] of [["/api/nope","GET",404],["/api/input","POST",405]] as const) {
+    const m = await measured(async () => expect((await req(path,method)).status).toBe(status));
+    expect(m.doAccesses).toBe(0); expect(m.queries).toHaveLength(0);
+  }
+  const plans = [
+    ["SELECT deadline FROM requests WHERE state IN ('pending','submitted') ORDER BY deadline LIMIT 1", "requests_active_deadline"],
+    ["SELECT terminal_at FROM requests WHERE terminal_at IS NOT NULL ORDER BY terminal_at LIMIT 1", "requests_terminal_time"],
+    ["SELECT at FROM rates ORDER BY at LIMIT 1", "rates_time"],
+  ];
+  const alarm = await measured(() => control("alarm"));
+  for (const [query, index] of plans) {
+    const q = alarm.queries.find((q: any) => q.query === query);
+    expect(q).toBeDefined(); expect(q.rowsRead).toBeLessThanOrEqual(1);
+    const plan = JSON.stringify(await sql("EXPLAIN QUERY PLAN " + query));
+    expect(plan).toContain(index); expect(plan).not.toContain("TEMP B-TREE");
+  }
+  console.log("capacity rowsRead", JSON.stringify(Object.fromEntries(Object.entries(results).map(([k,v]) => [k, {rowsRead:v.rowsRead,sqlCalls:v.queries.length,alarmWrites:v.alarmWrites}]))));
+});
+
+test.each([
+  ["/api/unknown", "GET", 404], ["/api/requests", "GET", 404],
+  ["/api/input", "POST", 405], ["/api/requests/x/consume", "GET", 405],
+  ["/api/requests/x/status", "POST", 405], ["/api/requests/x/nope", "POST", 404],
+  ["/api/input", "PUT", 405], ["/api/requests/x", "OPTIONS", 405],
+])("rejects route/method before DO and SQL: %s %s", async (path, method, status) => {
+  const outer = await measured(async () => expect((await req(path, method)).status).toBe(status));
+  expect(outer.doAccesses).toBe(0); expect(outer.doFetches).toBe(0); expect(outer.queries).toHaveLength(0);
+  const inner = await measured(async () => expect((await control("fetch", {path,method})).status).toBe(status));
+  expect(inner.doFetches).toBe(1); expect(inner.queries).toHaveLength(0); expect(inner.alarmWrites).toBe(0);
+});
+
+test("input window expires individual events and source slots without waiting for alarm", async () => {
+  await req("/api/input");
+  const [{source}] = await sql("SELECT source FROM input_sources");
+  const at = Date.now();
+  await sql("DELETE FROM rates");
+  await sql(`WITH RECURSIVE n(i) AS (VALUES(0) UNION ALL SELECT i+1 FROM n WHERE i<119)
+    INSERT INTO rates SELECT 'input', ?, CASE WHEN i<60 THEN ? ELSE ? END FROM n`, source, at-61000, at-10000);
+  await sql("UPDATE input_sources SET last_at=?", at-10000);
+  for (let i=0; i<60; i++) expect((await req("/api/input")).status).toBe(404);
+  expect((await req("/api/input")).status).toBe(429);
+  expect((await sql("SELECT COUNT(*) n FROM rates WHERE source=?",source))[0].n).toBe(120);
+  await sql("UPDATE rates SET at=?", at-61000);
+  await sql("UPDATE input_sources SET last_at=?", at-61000);
+  await sql(`WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<511)
+    INSERT INTO input_sources SELECT 'old-'||i, ? FROM n`, at-61000);
+  const m = await measured(async () => expect((await req("/api/input", "GET", undefined, "bad", "203.0.113.77")).status).toBe(404));
+  expect(m.rowsRead).toBeLessThan(2048);
+  expect((await sql("SELECT COUNT(*) n FROM input_sources"))[0].n).toBe(1);
+  // Expired history for other sources remains for alarm cleanup only.
+  expect((await sql("SELECT COUNT(*) n FROM rates"))[0].n).toBe(121);
+});
+
+test("terminal transitions keep an earlier alarm, while a shorter deadline advances it", async () => {
+  const a = await create(); const first = (await control("inspect")).alarm;
+  const b = await create("192.0.2.2", 10); const earlier = (await control("inspect")).alarm;
+  expect(earlier).toBeLessThan(first);
+  for (const action of ["submit", "consume"]) {
+    const m = await measured(() => req(`/api/requests/${b.id}/${action}`, "POST", action === "submit" ? envelope : {}, action === "submit" ? b.submit : b.receive_token));
+    expect(m.alarmWrites).toBe(0); expect((await control("inspect")).alarm).toBe(earlier);
+  }
+  await req(`/api/requests/${a.id}/cancel`, "POST", {}, a.receive_token);
+  expect((await control("inspect")).alarm).toBe(earlier);
+  await control("alarm"); expect((await control("inspect")).alarm).toBe(first);
+});
+
+test("alarm advances through deadline and retention, then removes all persisted scheduling state", async () => {
+  const c = await create(); await req(`/api/requests/${c.id}/submit`, "POST", envelope, c.submit);
+  await sql("DELETE FROM rates");
+  const deadline = Date.now()-100;
+  await sql("UPDATE requests SET deadline=?", deadline); await control("alarm");
+  let state = await control("inspect");
+  expect(state.rows[0].state).toBe("expired"); expect(state.rows[0].envelope).toBeNull(); expect(state.alarm).toBe(deadline+60000);
+  await sql("UPDATE requests SET terminal_at=?", Date.now()-60001); await control("alarm");
+  state = await control("inspect"); expect(state.rows).toHaveLength(0); expect(state.alarm).toBeNull();
+  expect(await sql("SELECT * FROM meta WHERE key='alarm_at'")).toHaveLength(0);
+});
+
+test("targeted lookups enforce retention even before a delayed alarm", async () => {
+  const c = await create(); await req(`/api/requests/${c.id}/submit`, "POST", envelope, c.submit);
+  await sql("UPDATE requests SET deadline=?", Date.now()-60001);
+  expect((await req(`/api/requests/${c.id}/consume`, "POST", {}, c.receive_token)).status).toBe(404);
+  expect(await sql("SELECT * FROM requests WHERE id=?",c.id)).toHaveLength(0);
+  expect((await req("/api/input", "GET", undefined, c.submit)).status).toBe(404);
+});
+
+test("persisted alarm and input-source window survive restart and expire without traffic", async () => {
+  const directory = await mkdtemp(join(tmpdir(),"secret-request-alarm-"));
+  await mf.dispose(); mf = await fixture({persist:directory});
+  const c = await create("192.0.2.1",10);
+  await req(`/api/requests/${c.id}/submit`, "POST", envelope, c.submit);
+  await req("/api/input", "GET", undefined, c.submit);
+  const before = await control("inspect");
+  await mf.dispose(); mf = await fixture({persist:directory});
+  const restored = await control("inspect");
+  expect(restored.alarm).toBe(before.alarm); expect(restored.sources).toEqual(before.sources);
+  const m = await measured(() => req("/api/input", "GET", undefined, c.submit));
+  expect(m.alarmWrites).toBe(0);
+  const delay = Math.max(0, before.alarm-Date.now())+700;
+  await new Promise(resolve => setTimeout(resolve,delay));
+  const after = await control("inspect");
+  expect(after.rows[0].state).toBe("expired"); expect(after.rows[0].envelope).toBeNull();
+  expect(after.alarm).toBeGreaterThan(before.alarm);
+});
+
+test("longest-TTL immediate cancellation for 28 simulated minutes cannot exhaust another source", async () => {
+  const start = Date.now();
+  for (let minute=0; minute<28; minute++) {
+    await control("clock", {now:start+minute*60000});
+    for (let i=0; i<20; i++) {
+      const c = await create("192.0.2.1",1800);
+      expect((await req(`/api/requests/${c.id}/cancel`,"POST",{},c.receive_token)).status).toBe(200);
+    }
+    expect((await req("/api/requests","POST",{name:"x",purpose:"x",public_key:jwk,ttl_seconds:1800})).status).toBe(429);
+    const other = await create("203.0.113.7",1800);
+    await req(`/api/requests/${other.id}/cancel`,"POST",{},other.receive_token);
+    expect((await sql("SELECT COUNT(*) n FROM requests"))[0].n).toBeLessThanOrEqual(21);
+    await control("alarm");
+  }
+});
+
+test.each(["cancel","decline","consume"])("%s keeps status for exactly 60 seconds from transition, independent of TTL", async action => {
+  const start = Date.now(); await control("clock",{now:start});
+  const c = await create("192.0.2.1",1800);
+  await control("clock",{now:start+5000});
+  if (action === "consume") await req(`/api/requests/${c.id}/submit`,"POST",envelope,c.submit);
+  expect((await req(`/api/requests/${c.id}/${action}`,"POST",{},action === "decline" ? c.submit : c.receive_token)).status).toBe(200);
+  expect((await sql("SELECT terminal_at FROM requests WHERE id=?",c.id))[0].terminal_at).toBe(start+5000);
+  await control("clock",{now:start+64999});
+  expect((await req(`/api/requests/${c.id}/status`,"GET",undefined,c.receive_token)).status).toBe(200);
+  expect((await req(`/api/requests/${c.id}/consume`,"POST",{},c.receive_token)).status).toBe(409);
+  await control("clock",{now:start+65000});
+  expect((await req(`/api/requests/${c.id}/status`,"GET",undefined,c.receive_token)).status).toBe(404);
+  expect((await req(`/api/requests/${c.id}/consume`,"POST",{},c.receive_token)).status).toBe(404);
+});
+
+test("expired retention starts at deadline, alarm keeps it until the exact boundary", async () => {
+  const start = Date.now(); await control("clock",{now:start});
+  const c = await create("192.0.2.1",10);
+  await req(`/api/requests/${c.id}/submit`,"POST",envelope,c.submit);
+  await control("clock",{now:start+20000}); await control("alarm");
+  expect((await sql("SELECT state, terminal_at, envelope FROM requests WHERE id=?",c.id))[0]).toEqual({state:"expired",terminal_at:start+10000,envelope:null});
+  await control("clock",{now:start+60000}); await control("alarm");
+  expect((await control("inspect")).alarm).toBe(start+70000);
+  await control("clock",{now:start+69999});
+  expect((await req(`/api/requests/${c.id}/status`,"GET",undefined,c.receive_token)).status).toBe(200);
+  await control("clock",{now:start+70000}); await control("alarm");
+  expect((await control("inspect")).rows).toHaveLength(0);
+  expect((await control("inspect")).alarm).toBeNull();
+});
+
+test("terminal hard cap evicts the oldest terminal while preserving all 128 active requests", async () => {
+  const at = Date.now(); await control("clock",{now:at});
+  const c = await create();
+  await sql(`WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<127)
+    INSERT INTO requests SELECT 'active-'||i, 'other-'||i, 'as-'||i, 'ar-'||i, deadline, 'pending', data, NULL, NULL FROM n CROSS JOIN requests WHERE id=?`,c.id);
+  await sql(`WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<512)
+    INSERT INTO requests SELECT 'old-'||i, source, 'os-'||i, 'or-'||i, deadline, 'consumed', data, NULL, ?+i FROM n CROSS JOIN requests WHERE id=?`,at-1000,c.id);
+  expect((await sql("SELECT COUNT(*) n FROM requests"))[0].n).toBe(640);
+  const m = await measured(() => req(`/api/requests/${c.id}/cancel`,"POST",{},c.receive_token));
+  expect(m.rowsRead).toBeLessThan(2048);
+  expect((await sql("SELECT COUNT(*) n FROM requests WHERE terminal_at IS NOT NULL"))[0].n).toBe(512);
+  expect(await sql("SELECT id FROM requests WHERE id='old-1'")).toHaveLength(0);
+  expect((await sql("SELECT COUNT(*) n FROM requests WHERE state='pending'"))[0].n).toBe(127);
+  await create("203.0.113.8");
+  expect((await sql("SELECT COUNT(*) n FROM requests WHERE state='pending'"))[0].n).toBe(128);
+  expect((await sql("SELECT COUNT(*) n FROM requests"))[0].n).toBe(640);
+});
+
+test("terminal timestamp survives cold restart with complete constructor SQL measured", async () => {
+  const directory = await mkdtemp(join(tmpdir(),"secret-request-terminal-"));
+  await mf.dispose(); mf = await fixture({persist:directory});
+  const at = Date.now(); await control("clock",{now:at});
+  const c = await create("192.0.2.1",1800);
+  await req(`/api/requests/${c.id}/submit`,"POST",envelope,c.submit);
+  await req(`/api/requests/${c.id}/consume`,"POST",{},c.receive_token);
+  const alarm = (await control("inspect")).alarm;
+  await mf.dispose(); mf = await fixture({persist:directory});
+  const m = await measured(async () => expect((await req(`/api/requests/${c.id}/consume`,"POST",{},c.receive_token)).status).toBe(409));
+  expect(m.queries.some((q: any) => q.query.includes("CREATE TABLE"))).toBe(true);
+  expect(m.rowsRead).toBeLessThan(100); expect(m.alarmWrites).toBe(0);
+  expect((await control("inspect")).alarm).toBe(alarm);
+  await control("clock",{now:at+59999});
+  expect((await req(`/api/requests/${c.id}/status`,"GET",undefined,c.receive_token)).status).toBe(200);
+  await control("clock",{now:at+60000});
+  expect((await req(`/api/requests/${c.id}/consume`,"POST",{},c.receive_token)).status).toBe(404);
+  expect(await sql("SELECT * FROM requests WHERE id=?",c.id)).toHaveLength(0);
+});
+
+test.each(["+", "/", "="])("strict base64url rejects %s in every wire field", async character => {
+  const c = await create();
+  const badN = character === "=" ? n+character : character+n.slice(1);
+  expect(validJwk({...jwk,n:badN})).toBe(false);
+  expect((await req("/api/requests", "POST", {name:"x",purpose:"x",public_key:{...jwk,n:badN}})).status).toBe(422);
+  for (const field of ["wrapped_key", "nonce", "ciphertext"] as const) {
+    const value = character === "=" ? envelope[field]+character : character+envelope[field].slice(1);
+    const bad = {...envelope,[field]:value}; expect(validEnvelope(bad)).toBe(false);
+    expect((await req(`/api/requests/${c.id}/submit`, "POST", bad, c.submit)).status).toBe(422);
+  }
+});
+
+test("strict base64url accepts valid remainders and URL-safe alphabet only", () => {
+  for (const size of [0,1,2,3,12,17,18,19,384,65552]) {
+    const bytes = Buffer.alloc(size,255), encoded = bytes.toString("base64url");
+    expect(Buffer.from(decode(encoded))).toEqual(bytes);
+  }
+  expect(Buffer.from(decode("-_8"))).toEqual(Buffer.from([251,255]));
+  for (const text of ["a", "aaaaa", "a=", "AA==", "AAA=", "AA\n", "+w", "/w"]) expect(() => decode(text)).toThrow();
+  expect(validJwk({...jwk,n:Buffer.alloc(384,255).toString("base64url")})).toBe(true);
+  for (const size of [17,18,19]) expect(validEnvelope({v:1,wrapped_key:Buffer.alloc(384,255).toString("base64url"),nonce:Buffer.alloc(12,255).toString("base64url"),ciphertext:Buffer.alloc(size,255).toString("base64url")})).toBe(true);
+});

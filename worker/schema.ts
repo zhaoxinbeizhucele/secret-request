@@ -11,11 +11,8 @@ function label(value: unknown, max: number): value is string {
   return typeof value === "string" && length(value) >= 1 && length(value) <= max && !!value.trim() && !/[\x00-\x1f]/.test(value);
 }
 export function decode(value: unknown): Uint8Array {
-  // Accept Python's URL-safe and standard padded base64 alphabet; reject junk.
-  if (typeof value !== "string" || !/^[A-Za-z0-9_+/-]*={0,2}$/.test(value)) throw new Error("base64");
-  const unpadded = value.replace(/=+$/, "");
-  if (unpadded.length % 4 === 1 || (value.includes("=") && value.length % 4 !== 0)) throw new Error("base64");
-  return Uint8Array.from(atob(unpadded.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - unpadded.length % 4) % 4)), c => c.charCodeAt(0));
+  if (typeof value !== "string" || !/^[A-Za-z0-9_-]*$/.test(value) || value.length % 4 === 1) throw new Error("base64");
+  return Uint8Array.from(atob(value.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - value.length % 4) % 4)), c => c.charCodeAt(0));
 }
 export function validJwk(value: unknown): boolean {
   try {
