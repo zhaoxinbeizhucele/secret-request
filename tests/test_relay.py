@@ -342,7 +342,7 @@ def test_input_page_is_only_served_at_short_path(system):
     assert "/api/input" in script and "current.id" in script and "/input/" not in script
     assert "location.reload()" in script and "history.replaceState" in script
     home = client.get("/assets/home.js").text
-    assert "location.replace('/i'" in home and "hashchange" in home and "{43}" not in home
+    assert "location.replace" not in home and "hashchange" not in home
     assert 'id="fields"' not in client.get("/").text
 
 

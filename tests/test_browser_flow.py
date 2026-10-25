@@ -239,7 +239,7 @@ def test_same_tab_short_link_switches_request(browser_system):
     context.close()
 
 
-def test_same_tab_root_fragment_opens_input(browser_system):
+def test_root_fragment_stays_on_the_homepage(browser_system):
     browser, base = browser_system
     context = browser.new_context()
     page = context.new_page()
@@ -252,15 +252,12 @@ def test_same_tab_root_fragment_opens_input(browser_system):
     page.goto(base + '/#start')
     assert page.url.endswith('#start')
     assert page.locator('h1').inner_text() == '让机密走自己的通道'
-    try:
-        page.goto(base + '/#' + token)
-    except Exception as exc:
-        if 'interrupted' not in str(exc).lower() and 'ERR_ABORTED' not in str(exc):
-            raise
-        page.wait_for_load_state('load')
-    playwright.expect(page.locator('#purpose')).to_have_text('根路径片段')
-    assert page.evaluate('location.pathname') == '/i'
-    assert page.evaluate('location.hash') == ''
+    page.evaluate('(token) => { location.hash = token; }', token)
+    page.wait_for_timeout(300)
+    assert page.evaluate('location.pathname') == '/'
+    assert page.evaluate('location.hash') == '#' + token
+    assert page.locator('#purpose').count() == 0
+    assert page.locator('h1').inner_text() == '让机密走自己的通道'
     assert not errors
     context.close()
 
