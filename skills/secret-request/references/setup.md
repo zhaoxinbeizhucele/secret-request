@@ -40,6 +40,6 @@ python3 -I '<skill目录>/scripts/install.py' --mode public --configure-wecom
 
 `npx skills update` 后运行安装器更新环境/入口。省略模式与 URL 时保留原配置；显式指定另一服务会报错并保留旧配置。要并行使用另一模式，指定独立的 `--application-directory` 和 `--config-directory`，不要覆盖已有任务的配置。
 
-`--no-local-notification` 可显式关闭 Windows/macOS 本机通知，`--local-notification` 可重新开启；这两个选项均不修改已配置的 webhook。macOS 需要 --build-notifier 和 Apple Command Line Tools。填写链接只有 `/i#<22 字符凭据>`。仓库里的 Windows 通知程序二进制需要在 Windows 上重新编译后才会打开这种链接；macOS 用 `--build-notifier` 或 `python3 scripts/build_native.py` 编译。Linux 本机通知返回 unsupported，使用已配置的 webhook。已有通知设置会保留。含 `request_token` 的配置无效，安装器不会改写它。
+`--no-local-notification` 可显式关闭 Windows/macOS 本机通知，`--local-notification` 可重新开启；这两个选项均不修改已配置的 webhook。填写链接只有 `/i#<22 字符凭据>`。Windows 通知程序已随包提供，能打开这种链接。macOS 没有随包二进制，需要 Apple Command Line Tools，并用 `--build-notifier` 或 `python3 scripts/build_native.py` 在本机编译。Linux 本机通知返回 unsupported，使用已配置的 webhook。已有通知设置会保留。含 `request_token` 的配置无效，安装器不会改写它。
 
 skill 路径变化或被删除会使命令入口失效，重新运行当前 skill 的安装器。安装服务仅适用于当前使用端；不要为了修复本机配置而重启已有中转服务。

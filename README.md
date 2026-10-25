@@ -96,7 +96,7 @@ secret-request --agent-name Codex --name "测试库登录" --purpose "查询已�
 
 22 个字符对应 128 位（`token_urlsafe(16)`）。在当前公共服务域名上是 44 个字符，例如 `https://sr.eicai.cc/i#` 再加 22 个字符。申请 ID 不放进链接。服务只保存填写凭据的 SHA-256，并按这个哈希查找申请。填写页带着同一凭据调用 `GET /api/input`，取回申请 ID 和公钥；AES-GCM 的附加数据仍是 `secret-request:v1:` 加上该 ID。领取凭据仍是 256 位，不出现在链接里。一次性提交、最长 30 分钟、撤销和创建频率限制不变，也不新增必填服务配置。可选配置是填写页查询频率 `input_lookups_per_minute`（环境变量 `SECRET_REQUEST_INPUT_LOOKUPS_PER_MINUTE`，默认每来源每分钟 120 次，范围 1–1024）。
 
-首页若带上同样的 22 字符片段，会转到 `/i`，避免凭据留在介绍页。客户端和本机通知程序只接受 `/i#` 这一种链接。仓库里的 Windows 通知程序二进制仍是旧构建，需要在 Windows 上重新编译后才会打开这种链接。
+客户端和本机通知程序只接受 `/i#` 这一种链接。Windows 通知程序已随仓库提供，能打开这种链接。macOS 没有随包二进制，需要在本机用 `--build-notifier` 或 `python3 scripts/build_native.py` 编译。
 
 默认等待 600 秒。提交确认后尝试关页，不能自动关闭时显示手动关闭提示。拒绝、取消或过期不执行任务。默认建立空闲 300 秒的本机会话，合法执行结束后重新计时；状态查询不续期。
 
