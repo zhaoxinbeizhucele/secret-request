@@ -38,6 +38,10 @@ def test_copied_local_server_and_real_client_health(tmp_path):
             assert client.get(base+'/assets/home.css').status_code == 200
             assert 'field-password' not in client.get(base).text
             assert client.get(base+'/input/fake').status_code == 200
+            short_page = client.get(base+'/i')
+            assert short_page.status_code == 200 and 'id="secret"' in short_page.text
+            assert '/api/input' in client.get(base+'/assets/app.js').text
+            assert "location.replace('/i'" in client.get(base+'/assets/home.js').text
             config = tmp_path/'client.json'
             config.write_text('{"url":"'+base+'","notifications":{"local":false}}')
             checked = subprocess.run([sys.executable, '-I', str(bundle/'scripts/secret_request_cli.py'),

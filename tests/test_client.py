@@ -86,7 +86,9 @@ def test_request_to_child_end_to_end(system,key,tmp_path,capfd,session_ttl,struc
         from cryptography.hazmat.primitives import hashes
         raw=os.urandom(32); nonce=os.urandom(12)
         envelope={"v":1,"wrapped_key":encode(validate_jwk(entry.public_key).encrypt(raw,padding.OAEP(mgf=padding.MGF1(hashes.SHA256()),algorithm=hashes.SHA256(),label=None))),"nonce":encode(nonce),"ciphertext":encode(AESGCM(raw).encrypt(nonce,secret.encode(),aad(rid)))}
-        assert client.post(f"/api/requests/{rid}/submit",json=envelope,headers=auth(created['input_url'].split('#')[1])).status_code==200
+        link, fragment = created["input_url"].split("#", 1)
+        assert link.endswith("/i") and len(fragment) == 22 and "/input/" not in created["input_url"]
+        assert client.post(f"/api/requests/{rid}/submit",json=envelope,headers=auth(fragment)).status_code==200
     assert run(arguments,client=client,on_created=approve)==0
     assert output.read_text()==hashlib.sha256(secret.encode()).hexdigest()
     captured="".join(capfd.readouterr()); assert secret not in captured and "completed" in captured

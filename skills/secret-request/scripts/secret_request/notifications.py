@@ -57,13 +57,23 @@ def validate_notifications(value, allow_local_http=False):
 
 
 def input_url(base, created):
-    """A relay response must not turn a notification into an arbitrary URL launcher."""
+    """Refuse to launch anything except this relay's legacy or short input link.
+
+    Legacy, and still the default relay response: /input/<24-char id>#<43-char token>.
+    Short, only after this client sends X-Secret-Request-Link: short: /i#<22-char token>.
+    A same-origin /#<22-char token> is also accepted so the form can be served at /.
+    The request id stays in the JSON body for both forms.
+    """
     rid, url = created["id"], created["input_url"]
+    if not isinstance(rid, str) or not isinstance(url, str):
+        raise ValueError("invalid input link")
     target, origin = urlsplit(url), urlsplit(base)
+    legacy = target.path == "/input/" + rid and re.fullmatch(r"[A-Za-z0-9_-]{43}", target.fragment) is not None
+    short = target.path in {"/i", "/", ""} and re.fullmatch(r"[A-Za-z0-9_-]{22}", target.fragment) is not None
     if (not re.fullmatch(r"[A-Za-z0-9_-]{24}", rid)
             or (target.scheme, target.hostname, target.port) != (origin.scheme, origin.hostname, origin.port)
-            or target.username or target.password or target.path != "/input/" + rid or target.query
-            or not re.fullmatch(r"[A-Za-z0-9_-]{43}", target.fragment)):
+            or target.username or target.password or target.query
+            or not (legacy or short)):
         raise ValueError("invalid input link")
     return url
 

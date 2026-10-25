@@ -9,6 +9,7 @@ import hmac
 import json
 import os
 from pathlib import Path
+import re
 import secrets
 import time
 from urllib.parse import urlsplit
@@ -25,6 +26,8 @@ from .fields import validate_agent, validate_fields
 HEADERS = {"Cache-Control": "no-store", "Referrer-Policy": "no-referrer",
     "X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY",
     "Content-Security-Policy": "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'"}
+# Submit tokens are unpadded base64url: 32 bytes (256 bits, 43 chars) or 16 bytes (128 bits, 22 chars).
+_TOKEN = re.compile(r"[A-Za-z0-9_-]{22}|[A-Za-z0-9_-]{43}")
 
 
 @dataclass
@@ -88,7 +91,7 @@ def bearer(request):
 
 
 def create_app(settings: Settings, clock=time.monotonic):
-    entries = {}
+    entries, submit_index = {}, {}
     rates, global_rate = {}, deque()
     source_salt = secrets.token_bytes(32)
     lock = asyncio.Lock()
@@ -107,6 +110,8 @@ def create_app(settings: Settings, clock=time.monotonic):
                 entry.state, entry.envelope = "expired", None
             if now >= entry.deadline + 600:
                 entries.pop(entry.id, None)
+                if submit_index.get(entry.submit_hash) == entry.id:
+                    submit_index.pop(entry.submit_hash, None)
 
     async def sweep():
         while True:
@@ -126,9 +131,11 @@ def create_app(settings: Settings, clock=time.monotonic):
             except asyncio.CancelledError:
                 pass
             entries.clear()
+            submit_index.clear()
 
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
     app.state.entries = entries
+    app.state.submit_index = submit_index
 
     @app.middleware("http")
     async def boundaries(request, call_next):
@@ -161,10 +168,29 @@ def create_app(settings: Settings, clock=time.monotonic):
     async def invalid_input(request, exc):
         return JSONResponse({"error": "invalid_request"}, status_code=422)
 
+    def presented_token(request):
+        token = bearer(request)
+        # Reject before hashing so a huge Authorization header cannot be used as a work factor.
+        if len(token) not in (22, 43) or _TOKEN.fullmatch(token) is None:
+            return None
+        return token
+
     def find(rid, request, role):
         purge()
+        token = presented_token(request)
         entry = entries.get(rid)
-        if not entry or not hmac.compare_digest(digest(bearer(request)), getattr(entry, role + "_hash")):
+        if token is None or entry is None or not hmac.compare_digest(digest(token), getattr(entry, role + "_hash")):
+            raise HTTPException(404, "request_not_found")
+        return entry
+
+    def find_submit(request):
+        purge()
+        token = presented_token(request)
+        if token is None:
+            raise HTTPException(404, "request_not_found")
+        hashed = digest(token)
+        entry = entries.get(submit_index.get(hashed, ""))
+        if entry is None or not hmac.compare_digest(hashed, entry.submit_hash):
             raise HTTPException(404, "request_not_found")
         return entry
 
@@ -200,18 +226,41 @@ def create_app(settings: Settings, clock=time.monotonic):
                     or len(global_rate) >= settings.global_requests_per_minute
                     or (source not in rates and len(rates) >= settings.max_requests * 4)):
                 raise HTTPException(429, "request_limit")
-            rid, submit, receive = secrets.token_urlsafe(18), secrets.token_urlsafe(32), secrets.token_urlsafe(32)
+            # Deployed clients accept only /input/<id>#<43-char token>. The short form
+            # is emitted only when the caller sends X-Secret-Request-Link: short.
+            short = request.headers.get("x-secret-request-link") == "short"
+            rid = submit = receive = submit_hash = None
+            for _ in range(8):
+                candidate_rid = secrets.token_urlsafe(18)
+                # 16 bytes is 128 bits and encodes to 22 unpadded base64url characters.
+                candidate_submit = secrets.token_urlsafe(16 if short else 32)
+                candidate_receive = secrets.token_urlsafe(32)
+                candidate_hash = digest(candidate_submit)
+                if (candidate_rid not in entries and candidate_hash not in submit_index
+                        and candidate_submit != candidate_receive
+                        and candidate_hash != digest(candidate_receive)):
+                    rid, submit, receive, submit_hash = (
+                        candidate_rid, candidate_submit, candidate_receive, candidate_hash)
+                    break
+            if rid is None:
+                raise HTTPException(503, "unavailable")
             entry = Entry(rid, source, body.name.strip(), body.purpose.strip(), body.public_key,
-                          digest(submit), digest(receive), clock() + body.ttl_seconds,
+                          submit_hash, digest(receive), clock() + body.ttl_seconds,
                           datetime.fromtimestamp(time.time() + body.ttl_seconds, timezone.utc).isoformat(),
                           agent, fields, datetime.now(timezone.utc).isoformat())
             entries[rid] = entry
+            submit_index[submit_hash] = rid
             rates[source] = recent
             recent.append(clock())
             global_rate.append(clock())
+            link = settings.base_url + ("/i#" + submit if short else "/input/" + rid + "#" + submit)
             return {"id": rid, "receive_token": receive, "state": "pending",
-                    "input_url": settings.base_url + "/input/" + rid + "#" + submit,
-                    "remaining_seconds": body.ttl_seconds}
+                    "input_url": link, "remaining_seconds": body.ttl_seconds}
+
+    @app.get("/api/input")
+    async def input_session(request: Request):
+        async with lock:
+            return public(find_submit(request))
 
     @app.get("/api/requests/{rid}")
     async def details(rid: str, request: Request):
@@ -267,6 +316,10 @@ def create_app(settings: Settings, clock=time.monotonic):
     @app.get("/")
     async def home():
         return FileResponse(ROOT / "web/home.html")
+
+    @app.get("/i")
+    async def short_page():
+        return FileResponse(ROOT / "web/index.html")
 
     @app.get("/input/{rid}")
     async def page(rid: str = ""):

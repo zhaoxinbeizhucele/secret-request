@@ -10,6 +10,7 @@ import sys
 import threading
 import time
 from types import SimpleNamespace
+from urllib.parse import urlsplit
 import uuid
 
 import httpx
@@ -226,10 +227,9 @@ def relay(tmp_path):
 
 
 def approve(waiting):
-    url, token = waiting["input_url"].split("#")
-    base = url.split("/input/")[0]
-    path = base + "/api/requests/" + waiting["request_id"]
-    headers = {"Authorization": "Bearer " + token}
+    parts = urlsplit(waiting["input_url"])
+    path = f"{parts.scheme}://{parts.netloc}/api/requests/" + waiting["request_id"]
+    headers = {"Authorization": "Bearer " + parts.fragment}
     with httpx.Client(trust_env=False) as http:
         details = http.get(path, headers=headers).json()
         key = SimpleNamespace(public_key=lambda: validate_jwk(details["public_key"]))
@@ -312,9 +312,9 @@ def test_real_interrupt_default_request(relay, tmp_path, phase):
         if completed:
             assert final["exit_code"] == final["execution"]["exit_code"] == 7
         if phase in {"waiting", "submitted_response", "consume_response"}:
-            url, token = waiting["input_url"].split("#")
-            path = url.split("/input/")[0] + "/api/requests/" + waiting["request_id"]
-            state = httpx.get(path, headers={"Authorization": "Bearer " + token}, trust_env=False).json()
+            parts = urlsplit(waiting["input_url"])
+            path = f"{parts.scheme}://{parts.netloc}/api/requests/" + waiting["request_id"]
+            state = httpx.get(path, headers={"Authorization": "Bearer " + parts.fragment}, trust_env=False).json()
             assert state["state"] == ("consumed" if phase == "consume_response" else "cancelled")
         if handle:
             state = session.request(handle, "status", execution_id=final["execution_id"])

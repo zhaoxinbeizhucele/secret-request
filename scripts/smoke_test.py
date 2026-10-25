@@ -9,6 +9,7 @@ from pathlib import Path
 import sys
 import tempfile
 from types import SimpleNamespace
+from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import httpx
@@ -41,11 +42,13 @@ def main():
             purpose='自动验收：仅使用虚构值，无需用户填写。',wait=30,execution_timeout=10,
             session_ttl=300,agent_name='Codex · 自动验收',fields_file=fields,show_link=False)
         def submit(created):
-            rid, token = created['id'], created['input_url'].split('#')[1]
-            # Check the deployed page and every static dependency as well as the
-            # API: a healthy relay can still have unreadable packaged web files.
+            rid = created['id']
+            link = urlsplit(created['input_url'])
+            token = link.fragment
+            # Check the page the relay actually issued, plus every static dependency:
+            # a healthy relay can still have unreadable packaged web files.
             for path, content_type in (
-                ('/input/' + rid, 'text/html'),
+                (link.path or '/', 'text/html'),
                 ('/assets/app.js', 'javascript'),
                 ('/assets/crypto.js', 'javascript'),
                 ('/assets/style.css', 'text/css'),

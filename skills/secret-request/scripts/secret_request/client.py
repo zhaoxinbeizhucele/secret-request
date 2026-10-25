@@ -231,7 +231,9 @@ def run(args, client=None, on_created=None, interrupt=None) -> int:
     client = client or httpx.Client(timeout=12, trust_env=False, follow_redirects=False)
     base = config["url"]
     try:
+        # Relays that do not recognize this header ignore it and return a legacy link.
         response = client.post(base + "/api/requests",
+            headers={"X-Secret-Request-Link": "short"},
             json={"name": args.name, "purpose": purpose, "ttl_seconds": args.wait, "public_key": public_jwk(key),
                   "agent": agent, "fields": fields})
         response.raise_for_status()
