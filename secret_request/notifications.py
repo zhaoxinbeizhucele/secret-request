@@ -12,8 +12,6 @@ from urllib.parse import parse_qs, urlsplit
 import httpx
 
 NATIVE = Path(__file__).resolve().parent / "native"
-# None until the native helper is probed. The result is reused for this process.
-_native_short_links = None
 
 
 def current_platform():
@@ -26,37 +24,6 @@ def native_helper():
     if current_platform() == "darwin":
         return NATIVE / "macos/SecretRequestNotify.app/Contents/MacOS/SecretRequestNotify"
     return None
-
-
-def native_supports_short_links():
-    """True when this platform's helper exits 0 for --supports-short-links.
-
-    Shipped helpers do not recognize the flag. Stdin is closed so an old helper,
-    which reads a notification before rejecting unknown arguments, returns immediately.
-    """
-    global _native_short_links
-    if _native_short_links is not None:
-        return _native_short_links
-    path = native_helper()
-    supported = False
-    if path is not None and path.is_file():
-        try:
-            result = subprocess.run([str(path), "--supports-short-links"],
-                                    stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                                    stderr=subprocess.DEVNULL, timeout=5,
-                                    creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
-            supported = result.returncode == 0
-        except (OSError, subprocess.SubprocessError):
-            supported = False
-    _native_short_links = supported
-    return supported
-
-
-def use_short_input_link(notifications):
-    """Short links stay on unless a native helper is in use and cannot open them."""
-    if not notifications.get("local") or native_helper() is None:
-        return True
-    return native_supports_short_links()
 
 
 def validate_notifications(value, allow_local_http=False):
@@ -102,12 +69,9 @@ def validate_notifications(value, allow_local_http=False):
 
 
 def input_url(base, created):
-    """Refuse to launch anything except this relay's legacy or short input link.
+    """Refuse to launch anything except this relay's /i#<22-char token> link.
 
-    Legacy, and still the default relay response: /input/<24-char id>#<43-char token>.
-    Short, only after this client sends X-Secret-Request-Link: short: /i#<22-char token>.
-    A same-origin /#<22-char token> is also accepted so the form can be served at /.
-    The request id stays in the JSON body for both forms.
+    The request id stays in the JSON body. The 256-bit receive token is never part of the link.
     """
     rid, url = created["id"], created["input_url"]
     if not isinstance(rid, str) or not isinstance(url, str):
@@ -116,12 +80,11 @@ def input_url(base, created):
     if any(ord(c) < 32 or ord(c) == 127 for c in url) or "@" in url or "?" in url:
         raise ValueError("invalid input link")
     target, origin = urlsplit(url), urlsplit(base)
-    legacy = target.path == "/input/" + rid and re.fullmatch(r"[A-Za-z0-9_-]{43}", target.fragment) is not None
-    short = target.path in {"/i", "/", ""} and re.fullmatch(r"[A-Za-z0-9_-]{22}", target.fragment) is not None
+    short = target.path == "/i" and re.fullmatch(r"[A-Za-z0-9_-]{22}", target.fragment) is not None
     if (not re.fullmatch(r"[A-Za-z0-9_-]{24}", rid)
             or (target.scheme, target.hostname, target.port) != (origin.scheme, origin.hostname, origin.port)
             or target.username is not None or target.password is not None or target.query
-            or not (legacy or short)):
+            or not short):
         raise ValueError("invalid input link")
     return url
 

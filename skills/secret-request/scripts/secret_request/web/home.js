@@ -1,9 +1,9 @@
 'use strict';
-// The server never sees the fragment. A token-shaped fragment at / is the short
-// form served from the site root; the input page itself lives at /i.
+// The relay only issues /i#<22-char token>. A credential fragment left on the
+// homepage is the same token, so send it to that page. Other hashes stay here.
 function redirectTokenFragment() {
   const fragment = location.hash.slice(1);
-  if (location.pathname === '/' && /^(?:[A-Za-z0-9_-]{22}|[A-Za-z0-9_-]{43})$/.test(fragment)) {
+  if (location.pathname === '/' && /^[A-Za-z0-9_-]{22}$/.test(fragment)) {
     location.replace('/i' + location.hash);
   }
 }

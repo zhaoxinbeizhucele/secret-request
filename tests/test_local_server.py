@@ -37,7 +37,7 @@ def test_copied_local_server_and_real_client_health(tmp_path):
             assert '让机密走' in client.get(base).text
             assert client.get(base+'/assets/home.css').status_code == 200
             assert 'field-password' not in client.get(base).text
-            assert client.get(base+'/input/fake').status_code == 200
+            assert client.get(base+'/input/fake').status_code == 404
             short_page = client.get(base+'/i')
             assert short_page.status_code == 200 and 'id="secret"' in short_page.text
             assert '/api/input' in client.get(base+'/assets/app.js').text

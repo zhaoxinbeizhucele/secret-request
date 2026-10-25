@@ -18,16 +18,6 @@ def nbytes(token):
     return len(base64.urlsafe_b64decode(token + "=" * (-len(token) % 4)))
 
 
-def accepted_by_deployed_clients(base, created):
-    """The link check shipped clients still run. Short links must not pass it."""
-    rid, url = created["id"], created["input_url"]
-    target, origin = urlsplit(url), urlsplit(base)
-    return bool(re.fullmatch(r"[A-Za-z0-9_-]{24}", rid)
-        and (target.scheme, target.hostname, target.port) == (origin.scheme, origin.hostname, origin.port)
-        and not target.username and not target.password and not target.query
-        and target.path == "/input/" + rid
-        and re.fullmatch(r"[A-Za-z0-9_-]{43}", target.fragment))
-
 def test_happy_path_single_delivery_no_plaintext(system, key):
     client, app, tokens, now = system
     result = request(client, tokens, key)
@@ -173,46 +163,43 @@ def test_health_reports_anonymous_protocol(system):
     assert system[0].get('/health').json() == {'status':'ok','version':'0.3.0','access':'anonymous'}
 
 
-def test_published_input_link_lengths():
-    assert len("https://sr.eicai.cc/input/" + "a" * 24 + "#" + "b" * 43) == 94
+def test_published_input_link_length():
     assert len("https://sr.eicai.cc/i#" + "c" * 22) == 44
-    assert len("https://sr.eicai.cc/#" + "c" * 22) == 43
 
 
-def test_default_link_matches_deployed_clients(system, key):
+def test_input_link_is_short_and_indexed(system, key):
     client, app, tokens, now = system
     result = request(client, tokens, key)
-    base = "http://testserver"
-    assert accepted_by_deployed_clients(base, result)
-    assert nbytes(result["id"]) == 18 and nbytes(result["submit_token"]) == 32 and nbytes(result["receive_token"]) == 32
+    parts = urlsplit(result["input_url"])
+    assert (parts.scheme, parts.hostname, parts.port, parts.path, parts.query) == ("http", "testserver", None, "/i", "")
+    assert parts.fragment == result["submit_token"] and result["id"] not in result["input_url"]
+    assert nbytes(result["id"]) == 18 and nbytes(result["submit_token"]) == 16 and nbytes(result["receive_token"]) == 32
     hashed = hashlib.sha256(result["submit_token"].encode()).hexdigest()
     assert app.state.submit_index[hashed] == result["id"]
     assert result["submit_token"] not in repr(app.state.submit_index)
     details = client.get("/api/input", headers=auth(result["submit_token"])).json()
     assert details["id"] == result["id"] and "receive_token" not in details and result["submit_token"] not in json.dumps(details)
-    page = client.get("/input/" + result["id"])
-    assert page.status_code == 200 and page.headers["referrer-policy"] == "no-referrer"
-    assert page.text == client.get("/i").text
+    page = client.get("/i")
+    assert page.status_code == 200 and page.headers["referrer-policy"] == "no-referrer" and 'id="secret"' in page.text
+    assert client.get("/input/" + result["id"]).status_code == 404
 
 
-def test_short_link_is_opt_in_and_looked_up_by_hash(system, key):
+def test_link_header_is_ignored_and_submit_token_is_looked_up_by_hash(system, key):
     client, app, tokens, now = system
     payload = {"name": "测试凭据", "purpose": "仅用于测试", "public_key": public_jwk(key)}
-    for value in ("Short", "short ", " short", "legacy", "short,short", ""):
+    for value in ("short", "Short", "short ", " short", "legacy", "short,short", ""):
         created = client.post("/api/requests", json=payload, headers={"X-Secret-Request-Link": value})
         assert created.status_code == 201
         body = created.json()
-        assert accepted_by_deployed_clients("http://testserver", body)
+        fragment = body["input_url"].split("#", 1)[1]
+        assert urlsplit(body["input_url"]).path == "/i" and re.fullmatch(r"[A-Za-z0-9_-]{22}", fragment)
+        assert "/input/" not in body["input_url"]
         client.post(f"/api/requests/{body['id']}/cancel", json={}, headers=auth(body["receive_token"]))
-    result = request(client, tokens, key, short_link=True)
+    result = request(client, tokens, key)
     parts = urlsplit(result["input_url"])
     assert parts.path == "/i" and parts.query == "" and parts.fragment == result["submit_token"]
     assert result["id"] not in result["input_url"].split("#", 1)[1]
-    assert not accepted_by_deployed_clients("http://testserver", result)
     assert nbytes(result["submit_token"]) == 16 and nbytes(result["receive_token"]) == 32 and nbytes(result["id"]) == 18
-    lowered = client.post("/api/requests", json=payload, headers={"x-secret-request-link": "short"})
-    assert lowered.status_code == 201 and urlsplit(lowered.json()["input_url"]).path == "/i"
-    client.post(f"/api/requests/{lowered.json()['id']}/cancel", json={}, headers=auth(lowered.json()["receive_token"]))
     hashed = hashlib.sha256(result["submit_token"].encode()).hexdigest()
     assert app.state.submit_index[hashed] == result["id"]
     assert result["submit_token"] not in repr(app.state.entries) and result["submit_token"] not in repr(app.state.submit_index)
@@ -232,7 +219,7 @@ def test_short_link_is_opt_in_and_looked_up_by_hash(system, key):
 
 def test_short_link_one_time_use_and_expiry(system, key):
     client, app, tokens, now = system
-    result = request(client, tokens, key, short_link=True, ttl_seconds=10)
+    result = request(client, tokens, key, ttl_seconds=10)
     rid, submit, receive = result["id"], result["submit_token"], result["receive_token"]
     envelope = encrypt(key, rid, "FAKE-ONCE")
     assert client.post(f"/api/requests/{rid}/submit", json=envelope, headers=auth(submit)).status_code == 200
@@ -241,7 +228,7 @@ def test_short_link_one_time_use_and_expiry(system, key):
     assert client.get("/api/input", headers=auth(submit)).json()["state"] == "submitted"
     assert client.post(f"/api/requests/{rid}/consume", json={}, headers=auth(receive)).status_code == 200
     assert client.post(f"/api/requests/{rid}/consume", json={}, headers=auth(receive)).status_code == 409
-    expiring = request(client, tokens, key, short_link=True, ttl_seconds=10)
+    expiring = request(client, tokens, key, ttl_seconds=10)
     exp_headers = auth(expiring["submit_token"])
     assert client.post(f"/api/requests/{expiring['id']}/submit", json=encrypt(key, expiring["id"], "FAKE-EXPIRE"), headers=exp_headers).status_code == 200
     now[0] += 10
@@ -258,8 +245,8 @@ def test_short_link_one_time_use_and_expiry(system, key):
 
 def test_short_link_capabilities_stay_separated(system, key):
     client, app, tokens, now = system
-    result = request(client, tokens, key, short_link=True)
-    other = request(client, tokens, key, short_link=True)
+    result = request(client, tokens, key)
+    other = request(client, tokens, key)
     rid, submit = result["id"], result["submit_token"]
     assert client.get("/api/input", headers=auth(result["receive_token"])).status_code == 404
     assert client.get("/api/input", headers=auth(other["submit_token"])).json()["id"] == other["id"]
@@ -284,7 +271,7 @@ def test_input_lookup_is_rate_limited_without_purging_on_malformed_tokens(key):
                      clock=lambda: now[0])
     with TestClient(app, client=("192.0.2.8", 1000)) as client:
         other = TestClient(app, client=("192.0.2.9", 1000))
-        created = request(client, {}, key, short_link=True, ttl_seconds=10)
+        created = request(client, {}, key, ttl_seconds=10)
         bad = {"Authorization": "Bearer " + "x" * 10}
         for _ in range(3):
             assert client.get("/api/input", headers=bad).status_code == 404
@@ -329,7 +316,7 @@ def test_malformed_and_rate_limited_input_lookups_skip_the_request_lock(key):
 
 def test_malformed_tokens_never_resolve(system, key):
     client, app, tokens, now = system
-    result = request(client, tokens, key, short_link=True)
+    result = request(client, tokens, key)
     envelope = encrypt(key, result["id"], "nope")
     samples = ["", "x" * 21, "x" * 23, "x" * 42, "x" * 44, "x" * 10000, "bad token",
                "+" * 43, "a" * 21 + "/", "a" * 42 + "=", "a" * 22 + "\n", "a" * 22]
@@ -345,18 +332,17 @@ def test_malformed_tokens_never_resolve(system, key):
     assert client.get("/api/input", headers=auth(result["submit_token"])).json()["state"] == "pending"
 
 
-def test_input_page_is_served_for_short_and_legacy_paths(system):
+def test_input_page_is_only_served_at_short_path(system):
     client, app, tokens, now = system
     short = client.get("/i")
-    legacy = client.get("/input/" + "a" * 24)
-    assert short.status_code == legacy.status_code == 200
-    assert short.text == legacy.text and 'id="secret"' in short.text
+    assert short.status_code == 200 and 'id="secret"' in short.text
+    assert client.get("/input/" + "a" * 24).status_code == 404
     assert short.headers["cache-control"] == "no-store" and short.headers["referrer-policy"] == "no-referrer"
     script = client.get("/assets/app.js").text
-    assert "/api/input" in script and "current.id" in script
+    assert "/api/input" in script and "current.id" in script and "/input/" not in script
     assert "location.reload()" in script and "history.replaceState" in script
     home = client.get("/assets/home.js").text
-    assert "location.replace('/i'" in home and "hashchange" in home
+    assert "location.replace('/i'" in home and "hashchange" in home and "{43}" not in home
     assert 'id="fields"' not in client.get("/").text
 
 

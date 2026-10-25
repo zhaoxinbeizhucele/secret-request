@@ -1,14 +1,11 @@
 import { encryptSecret } from "./crypto.js";
 
 const $ = (id) => document.getElementById(id);
-const legacyMatch = location.pathname.match(/^\/input\/([A-Za-z0-9_-]{24})$/);
-const legacyId = legacyMatch ? legacyMatch[1] : "";
 let ignoreHashChange = false;
 let token = "";
 function takeToken() {
   const value = location.hash.slice(1);
-  const ok = /^[A-Za-z0-9_-]{22}$/.test(value) || /^[A-Za-z0-9_-]{43}$/.test(value);
-  if (!ok) return "";
+  if (!/^[A-Za-z0-9_-]{22}$/.test(value)) return "";
   // Drop the bearer token from the address bar. replaceState does not emit hashchange.
   if (location.hash) {
     ignoreHashChange = true;
@@ -25,7 +22,7 @@ addEventListener("hashchange", () => {
 });
 token = takeToken();
 const tokenOk = Boolean(token);
-let requestId = legacyId;
+let requestId = "";
 let current, busy = false, pendingEnvelope, countdown = 0, rendered = false, attemptedSubmission = false, attemptedDecline = false, finished = false;
 const fieldInputs = new Map();
 const states = {
@@ -112,7 +109,7 @@ async function refresh() {
   try {
     current = await api();
     if (finished) return;
-    if (!current || !/^[A-Za-z0-9_-]{24}$/.test(current.id) || (legacyId && current.id !== legacyId)) {
+    if (!current || !/^[A-Za-z0-9_-]{24}$/.test(current.id)) {
       throw new Error("404");
     }
     requestId = current.id;

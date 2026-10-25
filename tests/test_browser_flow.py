@@ -52,9 +52,9 @@ def launch_browser(p):
         pytest.fail('No Chromium browser: ' + '; '.join(errors + [str(exc)]))
 
 
-def create(base, multiple=True, short=False, purpose=''):
+def create(base, multiple=True, purpose=''):
     return httpx.get(base + '/test/create', params={
-        'multiple': str(multiple).lower(), 'short': str(short).lower(), 'purpose': purpose,
+        'multiple': str(multiple).lower(), 'purpose': purpose,
     }, trust_env=False).json()
 
 
@@ -144,7 +144,7 @@ def test_retry_keeps_encrypted_fields_after_network_failure(browser_system):
     context.close()
 
 
-def test_legacy_and_decline(browser_system):
+def test_single_secret_and_decline(browser_system):
     browser, base = browser_system
     context = browser.new_context()
     page = context.new_page(); page.add_init_script('window.close = () => {};')
@@ -211,8 +211,8 @@ def test_same_tab_short_link_switches_request(browser_system):
     page = context.new_page()
     errors = []
     page.on('pageerror', lambda e: errors.append(str(e)))
-    first = create(base, multiple=False, short=True, purpose='用途甲')
-    second = create(base, multiple=False, short=True, purpose='用途乙')
+    first = create(base, multiple=False, purpose='用途甲')
+    second = create(base, multiple=False, purpose='用途乙')
     page.goto(first['url'])
     playwright.expect(page.locator('#purpose')).to_have_text('用途甲')
     assert page.evaluate('location.hash') == '' and page.evaluate('location.pathname') == '/i'
@@ -245,7 +245,7 @@ def test_same_tab_root_fragment_opens_input(browser_system):
     page = context.new_page()
     errors = []
     page.on('pageerror', lambda error: errors.append(str(error)))
-    created = create(base, multiple=False, short=True, purpose='根路径片段')
+    created = create(base, multiple=False, purpose='根路径片段')
     token = created['url'].split('#', 1)[1]
     page.goto(base + '/')
     assert page.locator('#purpose').count() == 0

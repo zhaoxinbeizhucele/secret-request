@@ -6,7 +6,7 @@ from secret_request import notifications as n
 
 def message():
     return {'id':'a'*24, 'title':'Agent · 申请', 'body':'用于本次测试',
-            'url':'https://relay.test/input/'+'a'*24+'#'+'b'*43, 'expires_in_seconds':600}
+            'url':'https://relay.test/i#'+'c'*22, 'expires_in_seconds':600}
 
 
 def test_native_and_hook_receive_only_this_input_link(monkeypatch):
@@ -70,7 +70,7 @@ def test_bad_relay_url_is_never_notified(monkeypatch):
     monkeypatch.setattr(n, 'local_notification', lambda _: pytest.fail('must not notify'))
     with pytest.raises(ValueError):
         n.notify({'url':'https://relay.test','notifications':{'local':True}},
-                 {'id':'a'*24,'input_url':'https://evil.test/input/'+'a'*24+'#'+'b'*43,'remaining_seconds':600}, 'name','purpose','Agent')
+                 {'id':'a'*24,'input_url':'https://evil.test/i#'+'c'*22,'remaining_seconds':600}, 'name','purpose','Agent')
 
 
 def test_interrupted_webhook_retires_native_notification(monkeypatch):
@@ -85,14 +85,10 @@ def test_interrupted_webhook_retires_native_notification(monkeypatch):
     assert closed == ['a'*24]
 
 
-def test_legacy_and_short_input_links_are_accepted():
+def test_only_the_short_input_link_is_accepted():
     base, rid = 'https://relay.test', 'a'*24
-    legacy = base + '/input/' + rid + '#' + 'b'*43
     short = base + '/i#' + 'c'*22
-    root = base + '/#' + 'd'*22
-    bare = base + '#' + 'e'*22
-    for url in (legacy, short, root, bare):
-        assert n.input_url(base, {'id': rid, 'input_url': url}) == url
+    assert n.input_url(base, {'id': rid, 'input_url': short}) == short
     assert rid not in short
     assert n.input_url(base + ':8443', {'id': rid, 'input_url': base + ':8443/i#' + 'c'*22}) == base + ':8443/i#' + 'c'*22
 
@@ -110,7 +106,10 @@ def test_legacy_and_short_input_links_are_accepted():
     ('https://relay.test/i/#' + 'c'*22, 'a'*24),
     ('https://relay.test/i/extra#' + 'c'*22, 'a'*24),
     ('https://relay.test/input/' + 'a'*24 + '#' + 'c'*22, 'a'*24),
+    ('https://relay.test/input/' + 'a'*24 + '#' + 'b'*43, 'a'*24),
     ('https://relay.test/input/' + 'b'*24 + '#' + 'b'*43, 'a'*24),
+    ('https://relay.test/#' + 'd'*22, 'a'*24),
+    ('https://relay.test#' + 'e'*22, 'a'*24),
     ('https://relay.test/#' + 'c'*43, 'a'*24),
     ('https://relay.test/i#' + 'c'*21 + '+', 'a'*24),
     ('https://relay.test/i#' + 'c'*22, 'a'*23),

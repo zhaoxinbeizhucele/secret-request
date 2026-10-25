@@ -22,10 +22,9 @@ func inputDestination(_ id: String, _ value: String) -> URL? {
           let host = url.host, !host.isEmpty,
           url.user == nil, url.password == nil, url.query == nil,
           let fragment = url.fragment else { return nil }
-    let legacy = url.path == "/input/" + id && fragment.range(of: "^[A-Za-z0-9_-]{43}$", options: .regularExpression) != nil
-    let shortLink = (url.path == "/i" || url.path == "/" || url.path.isEmpty)
+    let shortLink = url.path == "/i"
         && fragment.range(of: "^[A-Za-z0-9_-]{22}$", options: .regularExpression) != nil
-    return (legacy || shortLink) ? url : nil
+    return shortLink ? url : nil
 }
 
 final class Delegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
@@ -80,11 +79,6 @@ final class Delegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterD
         center.removeDeliveredNotifications(withIdentifiers: [notice.id])
         center.removePendingNotificationRequests(withIdentifiers: [notice.id])
     }
-}
-
-// Exit before reading stdin. Shipped builds do not recognize this flag and exit 1.
-if CommandLine.arguments.count == 2, CommandLine.arguments[1] == "--supports-short-links" {
-    exit(0)
 }
 
 do {

@@ -27,7 +27,7 @@ from .fields import validate_agent, validate_fields
 HEADERS = {"Cache-Control": "no-store", "Referrer-Policy": "no-referrer",
     "X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY",
     "Content-Security-Policy": "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'"}
-# Submit tokens are unpadded base64url: 32 bytes (256 bits, 43 chars) or 16 bytes (128 bits, 22 chars).
+# Submit tokens are 16 bytes (128 bits, 22 chars). Receive tokens are 32 bytes (256 bits, 43 chars).
 _TOKEN = re.compile(r"[A-Za-z0-9_-]{22}|[A-Za-z0-9_-]{43}")
 
 
@@ -187,7 +187,8 @@ def create_app(settings: Settings, clock=time.monotonic):
 
     def presented_token(request):
         token = bearer(request)
-        # Reject before hashing so a huge Authorization header cannot be used as a work factor.
+        # 22 is the submit capability; 43 is the receive capability. Reject other
+        # lengths before hashing so a huge Authorization header cannot be a work factor.
         if len(token) not in (22, 43) or _TOKEN.fullmatch(token) is None:
             return None
         return token
@@ -259,14 +260,11 @@ def create_app(settings: Settings, clock=time.monotonic):
                     or len(global_rate) >= settings.global_requests_per_minute
                     or (source not in rates and len(rates) >= settings.max_requests * 4)):
                 raise HTTPException(429, "request_limit")
-            # Deployed clients accept only /input/<id>#<43-char token>. The short form
-            # is emitted only when the caller sends X-Secret-Request-Link: short.
-            short = request.headers.get("x-secret-request-link") == "short"
             rid = submit = receive = submit_hash = None
             for _ in range(8):
                 candidate_rid = secrets.token_urlsafe(18)
                 # 16 bytes is 128 bits and encodes to 22 unpadded base64url characters.
-                candidate_submit = secrets.token_urlsafe(16 if short else 32)
+                candidate_submit = secrets.token_urlsafe(16)
                 candidate_receive = secrets.token_urlsafe(32)
                 candidate_hash = digest(candidate_submit)
                 if (candidate_rid not in entries and candidate_hash not in submit_index
@@ -286,7 +284,7 @@ def create_app(settings: Settings, clock=time.monotonic):
             rates[source] = recent
             recent.append(clock())
             global_rate.append(clock())
-            link = settings.base_url + ("/i#" + submit if short else "/input/" + rid + "#" + submit)
+            link = settings.base_url + "/i#" + submit
             return {"id": rid, "receive_token": receive, "state": "pending",
                     "input_url": link, "remaining_seconds": body.ttl_seconds}
 
@@ -357,11 +355,7 @@ def create_app(settings: Settings, clock=time.monotonic):
         return FileResponse(ROOT / "web/home.html")
 
     @app.get("/i")
-    async def short_page():
-        return FileResponse(ROOT / "web/index.html")
-
-    @app.get("/input/{rid}")
-    async def page(rid: str = ""):
+    async def input_page():
         return FileResponse(ROOT / "web/index.html")
 
     @app.get("/assets/{name}")
