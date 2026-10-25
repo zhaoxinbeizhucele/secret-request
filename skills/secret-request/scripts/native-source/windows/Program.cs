@@ -44,6 +44,9 @@ static class Program
     {
         try
         {
+            // Exit before reading stdin. Shipped builds do not recognize this flag and return 1.
+            if (args.SequenceEqual(new[] { "--supports-short-links" }))
+                return 0;
             if (args.SequenceEqual(new[] { "--self-test" }))
             {
                 var xml = Build(new Notice(new string('a', 24), "Agent", "用途",

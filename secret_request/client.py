@@ -16,7 +16,7 @@ import httpx
 
 from .crypto import decrypt, new_key, public_jwk
 from .fields import validate_agent, validate_fields, validate_values
-from .notifications import input_url, notify, validate_notifications
+from .notifications import input_url, notify, use_short_input_link, validate_notifications
 
 
 def load_config(path: Path, allow_local_http=False) -> dict:
@@ -232,8 +232,9 @@ def run(args, client=None, on_created=None, interrupt=None) -> int:
     base = config["url"]
     try:
         # Relays that do not recognize this header ignore it and return a legacy link.
-        response = client.post(base + "/api/requests",
-            headers={"X-Secret-Request-Link": "short"},
+        # A native helper that fails --supports-short-links still only opens the legacy URL.
+        headers = {"X-Secret-Request-Link": "short"} if use_short_input_link(config["notifications"]) else None
+        response = client.post(base + "/api/requests", headers=headers,
             json={"name": args.name, "purpose": purpose, "ttl_seconds": args.wait, "public_key": public_jwk(key),
                   "agent": agent, "fields": fields})
         response.raise_for_status()

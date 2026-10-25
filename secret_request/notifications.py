@@ -12,6 +12,47 @@ from urllib.parse import parse_qs, urlsplit
 import httpx
 
 NATIVE = Path(__file__).resolve().parent / "native"
+# None until the native helper is probed. The result is reused for this process.
+_native_short_links = None
+
+
+def native_helper():
+    if sys.platform == "win32":
+        return NATIVE / "windows/SecretRequest.Notify.exe"
+    if sys.platform == "darwin":
+        return NATIVE / "macos/SecretRequestNotify.app/Contents/MacOS/SecretRequestNotify"
+    return None
+
+
+def native_supports_short_links():
+    """True when this platform's helper exits 0 for --supports-short-links.
+
+    Shipped helpers do not recognize the flag. Stdin is closed so an old helper,
+    which reads a notification before rejecting unknown arguments, returns immediately.
+    """
+    global _native_short_links
+    if _native_short_links is not None:
+        return _native_short_links
+    path = native_helper()
+    supported = False
+    if path is not None and path.is_file():
+        try:
+            result = subprocess.run([str(path), "--supports-short-links"],
+                                    stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                    stderr=subprocess.DEVNULL, timeout=5,
+                                    creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
+            supported = result.returncode == 0
+        except (OSError, subprocess.SubprocessError):
+            supported = False
+    _native_short_links = supported
+    return supported
+
+
+def use_short_input_link(notifications):
+    """Short links stay on unless a native helper is in use and cannot open them."""
+    if not notifications.get("local") or native_helper() is None:
+        return True
+    return native_supports_short_links()
 
 
 def validate_notifications(value, allow_local_http=False):
@@ -82,12 +123,10 @@ def input_url(base, created):
 
 
 def local_notification(message):
-    if sys.platform == "win32":
-        command = [str(NATIVE / "windows/SecretRequest.Notify.exe")]
-    elif sys.platform == "darwin":
-        command = [str(NATIVE / "macos/SecretRequestNotify.app/Contents/MacOS/SecretRequestNotify")]
-    else:
+    helper = native_helper()
+    if helper is None:
         return "unsupported", None
+    command = [str(helper)]
     if sys.platform == "darwin":
         process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                    stderr=subprocess.DEVNULL, start_new_session=True)

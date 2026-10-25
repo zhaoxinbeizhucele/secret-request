@@ -82,6 +82,11 @@ final class Delegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterD
     }
 }
 
+// Exit before reading stdin. Shipped builds do not recognize this flag and exit 1.
+if CommandLine.arguments.count == 2, CommandLine.arguments[1] == "--supports-short-links" {
+    exit(0)
+}
+
 do {
     let data = FileHandle.standardInput.readDataToEndOfFile()
     guard data.count <= 8192 else { exit(1) }
