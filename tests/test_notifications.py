@@ -117,6 +117,15 @@ def test_legacy_and_short_input_links_are_accepted():
     ('https://relay.test/i#' + 'c'*22, '../' + 'a'*21),
     ('javascript:alert(1)#' + 'c'*22, 'a'*24),
     ('https://relay.test/i#' + 'c'*22, None),
+    ('https://@relay.test/i#' + 'c'*22, 'a'*24),
+    ('https://:@relay.test/i#' + 'c'*22, 'a'*24),
+    ('https://relay.test/i?#' + 'c'*22, 'a'*24),
+    ('https://relay.test/i#' + 'c'*22 + '\n', 'a'*24),
+    ('https://relay.test/i#' + 'c'*10 + '\n' + 'c'*12, 'a'*24),
+    ('https://relay.test/\ni#' + 'c'*22, 'a'*24),
+    ('https://relay.test/i#' + 'c'*22 + '\r', 'a'*24),
+    ('https://relay.test/i#' + 'c'*22 + '\t', 'a'*24),
+    ('https://relay.test/i#' + 'c'*22 + '\x7f', 'a'*24),
 ])
 def test_malformed_input_links_are_rejected(url, rid):
     with pytest.raises(ValueError):

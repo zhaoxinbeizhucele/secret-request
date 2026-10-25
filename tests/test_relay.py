@@ -276,6 +276,26 @@ def test_short_link_capabilities_stay_separated(system, key):
     assert client.get("/api/input", headers=auth(other["submit_token"])).json()["state"] == "cancelled"
 
 
+def test_input_lookup_is_rate_limited_without_purging_on_malformed_tokens(key):
+    now = [0.0]
+    app = create_app(Settings("http://testserver", allow_local_http=True, input_lookups_per_minute=3),
+                     clock=lambda: now[0])
+    with TestClient(app, client=("192.0.2.8", 1000)) as client:
+        other = TestClient(app, client=("192.0.2.9", 1000))
+        created = request(client, {}, key, short_link=True, ttl_seconds=10)
+        bad = {"Authorization": "Bearer " + "x" * 10}
+        for _ in range(3):
+            assert client.get("/api/input", headers=bad).status_code == 404
+        assert client.get("/api/input", headers=auth(created["submit_token"])).status_code == 429
+        now[0] += 10
+        assert app.state.entries[created["id"]].state == "pending"
+        assert client.get("/api/input", headers=bad).status_code == 429
+        assert other.get("/api/input", headers=bad).status_code == 404
+        now[0] += 60
+        assert client.get("/api/input", headers=auth(created["submit_token"])).json()["state"] == "expired"
+        other.close()
+
+
 def test_malformed_tokens_never_resolve(system, key):
     client, app, tokens, now = system
     result = request(client, tokens, key, short_link=True)
@@ -301,8 +321,9 @@ def test_input_page_is_served_for_short_and_legacy_paths(system):
     assert short.status_code == legacy.status_code == 200
     assert short.text == legacy.text and 'id="secret"' in short.text
     assert short.headers["cache-control"] == "no-store" and short.headers["referrer-policy"] == "no-referrer"
-    assert "/api/input" in client.get("/assets/app.js").text
-    assert "current.id" in client.get("/assets/app.js").text
+    script = client.get("/assets/app.js").text
+    assert "/api/input" in script and "current.id" in script
+    assert "location.reload()" in script and "history.replaceState" in script
     assert "location.replace('/i'" in client.get("/assets/home.js").text
     assert 'id="fields"' not in client.get("/").text
 

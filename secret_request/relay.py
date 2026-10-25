@@ -37,6 +37,7 @@ class Settings:
     max_requests_per_ip: int = 8
     requests_per_minute: int = 20
     global_requests_per_minute: int = 120
+    input_lookups_per_minute: int = 120
     allow_local_http: bool = False
 
     def __post_init__(self):
@@ -49,7 +50,7 @@ class Settings:
         self.base_url = self.base_url.rstrip("/")
         if any(type(v) is not int or not 1 <= v <= 1024 for v in
                (self.max_requests, self.max_requests_per_ip, self.requests_per_minute,
-                self.global_requests_per_minute)):
+                self.global_requests_per_minute, self.input_lookups_per_minute)):
             raise ValueError("invalid request limit")
 
 
@@ -92,7 +93,7 @@ def bearer(request):
 
 def create_app(settings: Settings, clock=time.monotonic):
     entries, submit_index = {}, {}
-    rates, global_rate = {}, deque()
+    rates, input_rates, global_rate = {}, {}, deque()
     source_salt = secrets.token_bytes(32)
     lock = asyncio.Lock()
 
@@ -103,6 +104,11 @@ def create_app(settings: Settings, clock=time.monotonic):
                 recent.popleft()
             if not recent:
                 rates.pop(source, None)
+        for source, recent in list(input_rates.items()):
+            while recent and recent[0] <= now - 60:
+                recent.popleft()
+            if not recent:
+                input_rates.pop(source, None)
         while global_rate and global_rate[0] <= now - 60:
             global_rate.popleft()
         for entry in list(entries.values()):
@@ -132,6 +138,7 @@ def create_app(settings: Settings, clock=time.monotonic):
                 pass
             entries.clear()
             submit_index.clear()
+            input_rates.clear()
 
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
     app.state.entries = entries
@@ -183,11 +190,27 @@ def create_app(settings: Settings, clock=time.monotonic):
             raise HTTPException(404, "request_not_found")
         return entry
 
-    def find_submit(request):
+    def client_source(request):
+        peer = request.client.host if request.client else "unknown"
+        return hmac.new(source_salt, peer.encode(), hashlib.sha256).hexdigest()
+
+    def allow_input_lookup(request):
+        now = clock()
+        source = client_source(request)
+        recent = input_rates.get(source)
+        if recent is None:
+            if len(input_rates) >= settings.max_requests * 4:
+                raise HTTPException(429, "request_limit")
+            recent = deque()
+            input_rates[source] = recent
+        while recent and recent[0] <= now - 60:
+            recent.popleft()
+        if len(recent) >= settings.input_lookups_per_minute:
+            raise HTTPException(429, "request_limit")
+        recent.append(now)
+
+    def lookup_submit(token):
         purge()
-        token = presented_token(request)
-        if token is None:
-            raise HTTPException(404, "request_not_found")
         hashed = digest(token)
         entry = entries.get(submit_index.get(hashed, ""))
         if entry is None or not hmac.compare_digest(hashed, entry.submit_hash):
@@ -259,8 +282,13 @@ def create_app(settings: Settings, clock=time.monotonic):
 
     @app.get("/api/input")
     async def input_session(request: Request):
+        # Shape-check outside the lock so a malformed bearer never purges or scans entries.
+        token = presented_token(request)
         async with lock:
-            return public(find_submit(request))
+            allow_input_lookup(request)
+            if token is None:
+                raise HTTPException(404, "request_not_found")
+            return public(lookup_submit(token))
 
     @app.get("/api/requests/{rid}")
     async def details(rid: str, request: Request):
@@ -337,7 +365,8 @@ def create_app(settings: Settings, clock=time.monotonic):
 def from_environment():
     if os.environ.get("SECRET_REQUEST_BASE_URL"):
         config = {"base_url": os.environ["SECRET_REQUEST_BASE_URL"]}
-        for name in ("max_requests", "max_requests_per_ip", "requests_per_minute", "global_requests_per_minute"):
+        for name in ("max_requests", "max_requests_per_ip", "requests_per_minute",
+                     "global_requests_per_minute", "input_lookups_per_minute"):
             value = os.environ.get("SECRET_REQUEST_" + name.upper())
             if value is not None:
                 config[name] = int(value)

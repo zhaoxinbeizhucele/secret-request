@@ -67,12 +67,15 @@ def input_url(base, created):
     rid, url = created["id"], created["input_url"]
     if not isinstance(rid, str) or not isinstance(url, str):
         raise ValueError("invalid input link")
+    # urlsplit drops raw newlines and treats "https://@host" and "https://host/i?" as empty.
+    if any(ord(c) < 32 or ord(c) == 127 for c in url) or "@" in url or "?" in url:
+        raise ValueError("invalid input link")
     target, origin = urlsplit(url), urlsplit(base)
     legacy = target.path == "/input/" + rid and re.fullmatch(r"[A-Za-z0-9_-]{43}", target.fragment) is not None
     short = target.path in {"/i", "/", ""} and re.fullmatch(r"[A-Za-z0-9_-]{22}", target.fragment) is not None
     if (not re.fullmatch(r"[A-Za-z0-9_-]{24}", rid)
             or (target.scheme, target.hostname, target.port) != (origin.scheme, origin.hostname, origin.port)
-            or target.username or target.password or target.query
+            or target.username is not None or target.password is not None or target.query
             or not (legacy or short)):
         raise ValueError("invalid input link")
     return url

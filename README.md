@@ -149,7 +149,7 @@ docker compose --env-file .env -f compose.proxy.yaml up -d
 
 按 `deploy/nginx.conf.example` 配置独立站点与证书。代理必须用真实连接来源覆盖 `X-Forwarded-For`，不可透传公网任意转发头；此 Compose 才会信任 host proxy。不要将该 relay 端口改为公网监听。若前面还有 CDN，先配置可信 CDN 地址范围再恢复真实 IP。
 
-两个 Compose 文件是替代方案，不要叠加。默认专用网段分别为 172.30.80.0/29 和 172.30.81.0/29；若与现有网络冲突，在 .env 设置 RELAY_SUBNET，并同步修改对应的 RELAY_PROXY_ADDRESS（Caddy）或 RELAY_GATEWAY（主机反代）。转发头信任仅限指定代理地址。单 worker、内存状态；不横向扩容共享申请。默认最多 128 个在途申请、每来源 8 个、每来源每分钟 20 次、全局每分钟 120 次。使用 `SECRET_REQUEST_MAX_REQUESTS`、`SECRET_REQUEST_MAX_REQUESTS_PER_IP`、`SECRET_REQUEST_REQUESTS_PER_MINUTE`、`SECRET_REQUEST_GLOBAL_REQUESTS_PER_MINUTE` 可调整，各项 1–1024。代理有请求体和读写超时限制，应用也有 100000 字节与 15 秒请求体读取限制。
+两个 Compose 文件是替代方案，不要叠加。默认专用网段分别为 172.30.80.0/29 和 172.30.81.0/29；若与现有网络冲突，在 .env 设置 RELAY_SUBNET，并同步修改对应的 RELAY_PROXY_ADDRESS（Caddy）或 RELAY_GATEWAY（主机反代）。转发头信任仅限指定代理地址。单 worker、内存状态；不横向扩容共享申请。默认最多 128 个在途申请、每来源 8 个、每来源每分钟 20 次、全局每分钟 120 次、填写页 `/api/input` 每来源每分钟 120 次。使用 `SECRET_REQUEST_MAX_REQUESTS`、`SECRET_REQUEST_MAX_REQUESTS_PER_IP`、`SECRET_REQUEST_REQUESTS_PER_MINUTE`、`SECRET_REQUEST_GLOBAL_REQUESTS_PER_MINUTE`、`SECRET_REQUEST_INPUT_LOOKUPS_PER_MINUTE` 可调整，各项 1–1024。代理有请求体和读写超时限制，应用也有 100000 字节与 15 秒请求体读取限制。
 
 停止服务用对应的 `docker compose ... down`；未交付申请随重启失效，已领取的本机会话不受影响。保留旧镜像 digest 和 Compose 环境即可回退。不要删除 Caddy 证书卷来更新服务。
 

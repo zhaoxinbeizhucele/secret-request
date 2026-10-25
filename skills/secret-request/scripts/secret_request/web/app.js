@@ -3,8 +3,28 @@ import { encryptSecret } from "./crypto.js";
 const $ = (id) => document.getElementById(id);
 const legacyMatch = location.pathname.match(/^\/input\/([A-Za-z0-9_-]{24})$/);
 const legacyId = legacyMatch ? legacyMatch[1] : "";
-const token = location.hash.slice(1);
-const tokenOk = /^[A-Za-z0-9_-]{22}$/.test(token) || /^[A-Za-z0-9_-]{43}$/.test(token);
+let ignoreHashChange = false;
+let token = "";
+function takeToken() {
+  const value = location.hash.slice(1);
+  const ok = /^[A-Za-z0-9_-]{22}$/.test(value) || /^[A-Za-z0-9_-]{43}$/.test(value);
+  if (!ok) return "";
+  // Drop the bearer token from the address bar. replaceState does not emit hashchange.
+  if (location.hash) {
+    ignoreHashChange = true;
+    history.replaceState(null, "", location.pathname + location.search);
+    ignoreHashChange = false;
+  }
+  return value;
+}
+addEventListener("hashchange", () => {
+  // A new fragment is another input link in this tab. Reload so polling, the
+  // bearer token and any typed secret from the previous link cannot leak into it.
+  if (ignoreHashChange || !location.hash) return;
+  location.reload();
+});
+token = takeToken();
+const tokenOk = Boolean(token);
 let requestId = legacyId;
 let current, busy = false, pendingEnvelope, countdown = 0, rendered = false, attemptedSubmission = false, attemptedDecline = false, finished = false;
 const fieldInputs = new Map();
