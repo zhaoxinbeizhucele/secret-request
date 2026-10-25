@@ -120,25 +120,36 @@ def test_failure_after_create_cancels_request(system,key,tmp_path):
 
 @pytest.mark.parametrize("kind", ["old", "new", "none"])
 def test_short_link_follows_native_helper_capability(system, tmp_path, monkeypatch, kind):
-    import subprocess
     from secret_request import notifications as notifications
     notifications._native_short_links = None
     client, app, tokens, now = system
     helper = tmp_path / "SecretRequest.Notify.exe"
     helper.write_bytes(b"fake-helper")
-    probes = []
+    windows_helper = notifications.NATIVE / "windows" / "SecretRequest.Notify.exe"
+    probes, clears = [], []
 
     def helper_path():
         return None if kind == "none" else helper
 
-    def probe(command, **kwargs):
-        probes.append(command)
-        assert command == [str(helper), "--supports-short-links"]
-        assert kwargs["stdin"] is subprocess.DEVNULL and kwargs["timeout"] == 5
-        return subprocess.CompletedProcess(command, 0 if kind == "new" else 1)
+    def run_helper(command, **kwargs):
+        # Delivery.close() on Windows also runs the helper, with --clear.
+        if len(command) == 2 and command[1] == "--supports-short-links":
+            probes.append(command)
+            assert command == [str(helper), "--supports-short-links"]
+            assert kwargs["stdin"] is subprocess.DEVNULL and kwargs["timeout"] == 5
+            return subprocess.CompletedProcess(command, 0 if kind == "new" else 1)
+        if len(command) == 2 and command[1] == "--clear":
+            clears.append(kwargs.get("input"))
+            assert command == [str(windows_helper), "--clear"]
+            assert kwargs["timeout"] == 5
+            return subprocess.CompletedProcess(command, 0)
+        raise AssertionError("unexpected helper command: " + repr(command))
 
+    # Force the Windows cleanup path so Linux CI runs the same --clear call.
+    monkeypatch.setattr(notifications.sys, "platform", "win32")
+    monkeypatch.setattr(notifications.subprocess, "CREATE_NO_WINDOW", 0x08000000, raising=False)
     monkeypatch.setattr(notifications, "native_helper", helper_path)
-    monkeypatch.setattr(notifications.subprocess, "run", probe)
+    monkeypatch.setattr(notifications.subprocess, "run", run_helper)
     monkeypatch.setattr(notifications, "local_notification", lambda message: ("sent", None))
     arguments = args(tmp_path, tokens, [sys.executable, "-c", "pass"])
     arguments.config.write_text(json.dumps({"url": "http://testserver", "notifications": {"local": True}}))
@@ -152,8 +163,7 @@ def test_short_link_follows_native_helper_capability(system, tmp_path, monkeypat
         run(arguments, client=client, on_created=stop)
     path, fragment = seen[0].split("#", 1)
     if kind == "old":
-        assert path.rsplit("/input/", 1)[-1] and "/input/" in path and len(path.rsplit("/input/", 1)[-1]) == 24
-        assert len(fragment) == 43 and "/i" not in path.rsplit("/", 1)[-1]
+        assert "/input/" in path and len(path.rsplit("/input/", 1)[-1]) == 24 and len(fragment) == 43
     else:
         assert path.endswith("/i") and "/input/" not in seen[0] and len(fragment) == 22
     if kind == "none":
@@ -161,6 +171,7 @@ def test_short_link_follows_native_helper_capability(system, tmp_path, monkeypat
     else:
         assert notifications.use_short_input_link({"local": True}) is (kind == "new")
         assert probes == [[str(helper), "--supports-short-links"]]
+    assert len(clears) == 1 and json.loads(clears[0])["url"] == seen[0]
     notifications._native_short_links = None
 
 
