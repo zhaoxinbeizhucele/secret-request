@@ -2,8 +2,7 @@ param(
     [string]$Python = 'python',
     [string]$ApplicationDirectory,
     [switch]$BuildNotifier,
-    [ValidateSet('public','local','custom')][string]$Mode,
-    [ValidateRange(1,65535)][int]$Port = 8787,
+    [ValidateSet('public','custom')][string]$Mode,
     [string]$Url,
     [string]$ConfigDirectory,
     [switch]$LocalNotification,
@@ -17,7 +16,6 @@ $taskArguments = @('-I', (Join-Path $PSScriptRoot 'install.py'))
 if ($ApplicationDirectory) { $taskArguments += @('--application-directory', $ApplicationDirectory) }
 if ($BuildNotifier) { $taskArguments += '--build-notifier' }
 if ($Mode) { $taskArguments += @('--mode', $Mode) }
-if ($PSBoundParameters.ContainsKey('Port')) { $taskArguments += @('--port', "$Port") }
 if ($Url) { $taskArguments += @('--url', $Url) }
 if ($ConfigDirectory) { $taskArguments += @('--config-directory', $ConfigDirectory) }
 if ($NoLocalNotification) { $taskArguments += '--no-local-notification' }

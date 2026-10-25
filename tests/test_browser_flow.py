@@ -12,30 +12,22 @@ playwright = pytest.importorskip('playwright.sync_api')
 ROOT = Path(__file__).resolve().parents[1]
 
 
+from .worker_backend import backend, BrowserBase, create_browser, check_browser, browser_state
+
 @pytest.fixture(scope='module')
 def browser_system():
-    with socket.socket() as sock:
-        sock.bind(('127.0.0.1', 0))
-        port = sock.getsockname()[1]
-    base = f'http://127.0.0.1:{port}'
-    env = {**os.environ, 'SECRET_REQUEST_TEST_PORT': str(port)}
-    server = subprocess.Popen([sys.executable, '-m', 'uvicorn', 'tests.browser_server:app',
-        '--host', '127.0.0.1', '--port', str(port), '--no-access-log', '--log-level', 'warning'],
-        cwd=ROOT, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    try:
-        for _ in range(100):
-            try:
-                if httpx.get(base + '/health', trust_env=False).status_code == 200: break
-            except httpx.HTTPError: pass
-            time.sleep(.1)
-        else: pytest.fail('Fixture service did not start')
+    with backend() as url:
+        base = BrowserBase(url)
         with playwright.sync_playwright() as p:
             browser = launch_browser(p)
             try: yield browser, base
             finally: browser.close()
-    finally:
-        server.terminate()
-        server.wait(timeout=10)
+
+@pytest.fixture(autouse=True)
+def reset_browser_worker(request):
+    if 'browser_system' in request.fixturenames:
+        _, base = request.getfixturevalue('browser_system')
+        httpx.post(base+'/__test/reset',json={},trust_env=False).raise_for_status()
 
 
 def launch_browser(p):
@@ -53,9 +45,7 @@ def launch_browser(p):
 
 
 def create(base, multiple=True, purpose=''):
-    return httpx.get(base + '/test/create', params={
-        'multiple': str(multiple).lower(), 'purpose': purpose,
-    }, trust_env=False).json()
+    return create_browser(base, multiple, purpose)
 
 
 def fill(page):
@@ -65,7 +55,7 @@ def fill(page):
 
 
 def check(base, rid):
-    assert httpx.get(base + '/test/check/' + rid, trust_env=False).json() == {'state': 'consumed', 'matches': True}
+    check_browser(base, rid)
 
 
 def test_multi_fields_fallback_and_layout(browser_system):
@@ -234,7 +224,7 @@ def test_same_tab_short_link_switches_request(browser_system):
     page.locator('#close-hint').wait_for(state='visible')
     assert submits and all(second['id'] in url and first['id'] not in url for url in submits)
     check(base, second['id'])
-    assert httpx.get(base + '/test/state/' + first['id'], trust_env=False).json() == {'state': 'pending'}
+    assert browser_state(base, first['id']) == {'state': 'pending'}
     assert not errors
     context.close()
 

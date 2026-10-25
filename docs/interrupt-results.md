@@ -2,7 +2,7 @@
 
 基线核对：2026-10-10，当前 HEAD 仍为 `d1f1ef4b5fdb6d648390c3ee53f5cd9aa24e6aad`，与 release-readiness 报告一致。原仓库未跟踪的调查材料保留；本轮使用 `fix/interrupt-results` 独立 worktree。
 
-后续状态：2026-10-11 已按用户新指令提交、合并、推送并发布既有 Debian 服务，见 [发布记录](deployment-2026-10-11.md)。以下“未提交/部署”的表述记录的是 10 月 10 日本轮实施结束时的状态；现有客户端安装仍未升级。
+历史后续状态：2026-10-11 曾按用户指令提交、合并、推送并发布当时的 Debian 服务。该发布记录已在 Cloudflare Worker 迁移中移除，此处仅保留历史说明，不表示本次 Worker 已发布或验证。以下“未提交/部署”的表述记录的是 10 月 10 日本轮实施结束时的状态；当时的现有客户端安装仍未升级。
 
 ## 状态约定
 
@@ -31,9 +31,9 @@
 
 ## 实际验证
 
-所有验证使用虚构输入、loopback 中转、临时配置/用户目录和隔离 Python 环境；消费者故意向 stdout/stderr 打印虚构输入，断言客户端输出不含输入、无异常堆栈。没有使用现有客户端配置、真实 webhook 或 Debian 服务。
+2026-10-10 的所有验证使用虚构输入、当时的本地测试中转、临时配置/用户目录和隔离 Python 环境；消费者故意向 stdout/stderr 打印虚构输入，断言客户端输出不含输入、无异常堆栈。没有使用现有客户端配置、真实 webhook 或 Debian 服务；这些结果不构成本次 Cloudflare Worker 的验证。
 
-最终结果：Windows 全量 **165 passed**；WSL/Linux **153 passed、1 deselected**（打包失败明确记录，浏览器/Node 两组未运行），见 [验证记录](validation/stage-a/README.md)。新增 `tests/test_interrupts.py` 共 22 项，其中 17 项分别在 Windows 与 Linux 送达真实 OS 信号：Windows 在隐藏独立控制台发送 CTRL_C_EVENT，Linux 对独立客户端进程组发送 SIGINT。屏障只控制真实启动、HTTP/RPC 或结果输出的时序；没有用抛 KeyboardInterrupt 代替中断验收。
+历史最终结果：Windows 全量 **165 passed**；WSL/Linux **153 passed、1 deselected**（打包失败明确记录，浏览器/Node 两组未运行）。原验证记录已在 Cloudflare Worker 迁移中移除，此处保留当时的结果摘要。新增 `tests/test_interrupts.py` 共 22 项，其中 17 项分别在 Windows 与 Linux 送达真实 OS 信号：Windows 在隐藏独立控制台发送 CTRL_C_EVENT，Linux 对独立客户端进程组发送 SIGINT。屏障只控制真实启动、HTTP/RPC 或结果输出的时序；没有用抛 KeyboardInterrupt 代替中断验收。
 
 | 验收点 | 已执行的证据 |
 | --- | --- |

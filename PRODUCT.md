@@ -5,7 +5,7 @@
 web
 
 ## Stack
-Python client and FastAPI relay, local HTML/CSS/JavaScript, short-lived Windows/macOS notification helpers, client-owned webhook.
+Python client, TypeScript Cloudflare Worker with one SQLite Durable Object, same-origin HTML/CSS/JavaScript, short-lived Windows/macOS notification helpers, client-owned webhook.
 
 ## Users
 People using local or remote agents who need to supply short-lived credentials. Service can be self-hosted or shared; recipients use a trusted HTTPS browser page.

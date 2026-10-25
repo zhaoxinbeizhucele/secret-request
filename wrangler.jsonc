@@ -1,0 +1,15 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "secret-request",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-10-24",
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{ "pattern": "sr.zhaox.app", "custom_domain": true }],
+  "vars": { "BASE_URL": "https://sr.zhaox.app" },
+  "durable_objects": { "bindings": [{ "name": "RELAY", "class_name": "Relay" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Relay"] }],
+  "rules": [{ "type": "Text", "globs": ["**/web/*.html", "**/web/*.css", "**/web/*.js"], "fallthrough": true }],
+  "observability": { "enabled": false },
+  "send_metrics": false
+}

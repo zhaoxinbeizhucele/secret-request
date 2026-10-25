@@ -203,27 +203,9 @@ raise SystemExit(client.main())
 
 
 @pytest.fixture
-def relay(tmp_path):
-    env = isolated_env(tmp_path)
-    with socket.socket() as sock:
-        sock.bind(("127.0.0.1", 0))
-        port = sock.getsockname()[1]
-    env["SECRET_REQUEST_TEST_PORT"] = str(port)
-    base = f"http://127.0.0.1:{port}"
-    process = subprocess.Popen([sys.executable, "-m", "uvicorn", "tests.browser_server:app",
-        "--host", "127.0.0.1", "--port", str(port), "--no-access-log", "--log-level", "warning"],
-        cwd=ROOT, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    def ready():
-        try:
-            return httpx.get(base + "/health", trust_env=False).status_code == 200
-        except httpx.HTTPError:
-            return False
-    try:
-        until(ready)
-        yield base, env
-    finally:
-        process.terminate()
-        process.wait(timeout=10)
+def relay(tmp_path, worker_url):
+    httpx.post(worker_url+'/__test/reset',json={},trust_env=False).raise_for_status()
+    yield worker_url, isolated_env(tmp_path)
 
 
 def approve(waiting):

@@ -1,9 +1,8 @@
-"""Bundle explicit runtime files, including the optional loopback relay."""
+"""Bundle explicit runtime files, for the Cloudflare client."""
 from pathlib import Path
 import shutil
 
-CLIENT_MODULES = ("__init__.py", "client.py", "crypto.py", "fields.py", "notifications.py", "session.py", "windows_job.py", "relay.py", "server.py")
-WEB_FILES = ('index.html', 'app.js', 'crypto.js', 'style.css', 'home.html', 'home.css', 'home.js', 'theme.js')
+CLIENT_MODULES = ("__init__.py", "client.py", "crypto.py", "fields.py", "notifications.py", "session.py", "windows_job.py")
 
 
 def build(root):
@@ -11,9 +10,6 @@ def build(root):
     target.mkdir(parents=True, exist_ok=True)
     for name in CLIENT_MODULES:
         shutil.copyfile(root / "secret_request" / name, target / name)
-    (target/'web').mkdir(exist_ok=True)
-    for name in WEB_FILES:
-        shutil.copyfile(root/'secret_request/web'/name, target/'web'/name)
     shutil.copyfile(root/'requirements.txt', target.parent/'requirements.txt')
     shutil.copyfile(root/'constraints.txt', target.parent/'constraints.txt')
     for name in ("windows", "macos"):

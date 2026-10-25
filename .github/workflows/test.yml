@@ -1,0 +1,37 @@
+name: Test
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      WRANGLER_SEND_METRICS: 'false'
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run typecheck
+      - run: npm run dry-run
+      - run: python -m pip install -r requirements.txt pytest pytest-asyncio playwright
+      - run: python -m playwright install --with-deps chromium
+      - run: python -I scripts/build_skill.py
+      - run: git diff --exit-code -- skills/secret-request/scripts
+      - run: python -m pytest -q
+      - run: python -I scripts/e2e_worker.py
+      - run: python -I scripts/package_client.py

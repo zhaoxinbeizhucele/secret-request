@@ -8,18 +8,11 @@ import shlex
 import subprocess
 import sys
 import tempfile
-from urllib.parse import urlsplit
 
-PUBLIC_URL = 'https://sr.eicai.cc'
+PUBLIC_URL = 'https://sr.zhaox.app'
 
 
-def select_url(mode, url, port, exists):
-    if mode == 'local':
-        if url:
-            raise ValueError('--mode local cannot be combined with --url')
-        if not 1 <= port <= 65535:
-            raise ValueError('Port must be between 1 and 65535')
-        return f'http://127.0.0.1:{port}'
+def select_url(mode, url, exists):
     if mode == 'public':
         if url:
             raise ValueError('--mode public cannot be combined with --url')
@@ -145,16 +138,15 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--application-directory', type=Path)
     parser.add_argument('--build-notifier', action='store_true')
-    parser.add_argument('--mode', choices=('public', 'local', 'custom'), help='Default: public for new installs, preserve existing service on updates')
+    parser.add_argument('--mode', choices=('public', 'custom'), help='Default: public for new installs, preserve existing service on updates')
     parser.add_argument('--url', help='Self-hosted HTTPS origin; loopback HTTP is allowed on this computer only')
-    parser.add_argument('--port', type=int, default=8787, help='Local relay port for --mode local')
     parser.add_argument('--config-directory', type=Path, help='Configuration directory; defaults to ~/.config/secret-request')
     local = parser.add_mutually_exclusive_group()
     local.add_argument('--local-notification', dest='local', action='store_true', default=None)
     local.add_argument('--no-local-notification', dest='local', action='store_false')
     parser.add_argument('--webhook-type', choices=('wecom', 'generic'), default='wecom')
     parser.add_argument('--webhook-env', help='Name of an existing environment variable containing the webhook URL')
-    parser.add_argument('--configure-wecom', action='store_true', help='Open a temporary loopback page to enter a WeCom webhook privately')
+    parser.add_argument('--configure-wecom', action='store_true', help='Open the selected Worker encrypted form to configure a WeCom webhook privately')
     args = parser.parse_args()
     if args.configure_wecom and args.webhook_env:
         parser.error('Choose --configure-wecom or --webhook-env')
@@ -165,7 +157,7 @@ def main():
                     if os.name == 'nt' else Path.home()/'.local/share/secret-request')
     application = application.resolve()
     config_file = (args.config_directory or Path.home()/'.config/secret-request').resolve()/'client.json'
-    url = select_url(args.mode, args.url, args.port, config_file.exists())
+    url = select_url(args.mode, args.url, config_file.exists())
     application.mkdir(parents=True, exist_ok=True)
     runtime = application/'runtime'
     python = runtime/('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
@@ -194,22 +186,8 @@ def main():
                            shlex.quote(str(scripts/'secret_request_cli.py'))+' --config '+shlex.quote(str(config_file))+' "$@"\n',encoding='utf-8')
         wrapper.chmod(0o700)
     print('Client installed: '+str(wrapper))
-    if os.name == 'nt':
-        server = application/'secret-request-server.cmd'
-        command = '"'+str(python)+'" -I -X utf8 "'+str(scripts/'secret_request_server.py')+'" --local'
-        server.write_text('@echo off\n'+command.replace('%','%%')+' %*\n', encoding='utf-8')
-    else:
-        server = application/'secret-request-server'
-        server.write_text('#!/bin/sh\nexec '+shlex.quote(str(python))+' -I -X utf8 '+
-                          shlex.quote(str(scripts/'secret_request_server.py'))+' --local "$@"\n', encoding='utf-8')
-        server.chmod(0o700)
-    if url and url.startswith('http://127.0.0.1:'):
-        print('Start the local relay in a background tool session: '+str(server)+' --port '+str(args.port))
     if args.configure_wecom:
         command = [str(python), '-I', '-X', 'utf8', str(scripts/'setup_wecom.py'), '--config', str(config_file)]
-        service = json.loads(config_file.read_text(encoding='utf-8-sig'))['url']
-        if urlsplit(service).hostname in {'localhost', '127.0.0.1', '::1'}:
-            command.append('--local')
         return subprocess.run(command).returncode
 
 
