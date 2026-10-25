@@ -12,8 +12,8 @@ WRAPPER = Path(__file__).resolve().parents[1]/'skills/secret-request/scripts/ins
 
 @pytest.mark.skipif(not POWERSHELL, reason='PowerShell is not installed')
 @pytest.mark.parametrize(('options','expected'),[
-    ('-Mode local -Port 9876 -ConfigureWecom -ConfigDirectory "configuration with spaces"',
-     ['--mode','local','--port','9876','--config-directory','configuration with spaces','--configure-wecom']),
+    ('-Mode public -ConfigureWecom -ConfigDirectory "configuration with spaces"',
+     ['--mode','public','--config-directory','configuration with spaces','--configure-wecom']),
     ('-Mode custom -Url https://custom.example -WebhookEnv TEST_HOOK -NoLocalNotification',
      ['--mode','custom','--url','https://custom.example','--no-local-notification','--webhook-env','TEST_HOOK','--webhook-type','wecom'])])
 def test_wrapper_forwards_arguments_without_running_installer(tmp_path,options,expected):

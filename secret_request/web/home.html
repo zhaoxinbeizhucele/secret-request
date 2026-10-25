@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
-  <meta name="description" content="通过企微通知和加密网页，把机密交给本机任务程序，避免在与 Agent 的聊天里粘贴密码。支持公共中转、本机运行和 Docker 自建。">
+  <meta name="description" content="通过企微通知和加密网页，把机密交给本机任务程序，避免在与 Agent 的聊天里粘贴密码。支持公共服务和 Cloudflare 自建。">
   <title>Secret Request · 让机密走自己的通道</title>
   <script src="/assets/theme.js"></script>
   <link rel="stylesheet" href="/assets/home.css">
@@ -70,16 +70,15 @@
       <p id="copy-status" role="status" class="copy-status"></p>
       <p class="requirements">需要 Node.js 22.20+ 与 Python 3.12+。企微 webhook 在本机配置，完整地址不要发进聊天。</p>
       <div class="modes">
-        <article><span class="tag">新安装默认</span><h3>使用公共服务</h3><p>无需部署，使用本站中转。让 Agent 初始化并连接企微 webhook，就能发起申请。</p><code>https://sr.eicai.cc</code></article>
-        <article><span class="tag">无需 Docker 或域名</span><h3>只在本机运行</h3><p>让 Agent 选择本机模式并拉起服务器。填写链接只能在同一台电脑打开，停止进程即关闭服务。</p><code>secret-request-server</code></article>
-        <article><span class="tag">自己的主机与 HTTPS</span><h3>部署自己的服务</h3><p>用 GHCR 镜像和 Docker Compose 部署，再让 Agent 使用你的地址。桌面和手机都能填写。</p><a href="https://github.com/zhaoxinbeizhucele/secret-request#部署中转服务">查看部署指引</a></article>
+        <article><span class="tag">新安装默认</span><h3>使用公共服务</h3><p>无需部署，使用本站中转。让 Agent 初始化并连接企微 webhook，就能发起申请。</p><code>https://sr.zhaox.app</code></article>
+        <article><span class="tag">Cloudflare Workers</span><h3>部署自己的服务</h3><p>用 Worker 与 SQLite Durable Object 部署，再让 Agent 使用你的地址。桌面和手机都能填写。</p><a href="https://github.com/zhaoxinbeizhucele/secret-request#部署中转服务">查看部署指引</a></article>
       </div>
     </section>
 
     <section class="privacy wrap" id="privacy" aria-labelledby="privacy-title">
       <h2 id="privacy-title">中转的是密文，边界也写清楚</h2>
       <dl class="limits">
-        <div><dt>服务保存什么</dt><dd>正常流程中只暂存加密输入，私钥留在发起电脑。没有申请历史数据库；领取一次即移除密文，重启后未交付的申请失效。</dd></div>
+        <div><dt>服务保存什么</dt><dd>正常流程中只暂存加密输入，私钥留在发起电脑。申请与密文短期保存在 SQLite Durable Object；领取一次即移除密文，重启保留未过期申请，截止后 10 分钟删除记录。</dd></div>
         <div><dt>你仍需信任</dt><dd>提供输入网页的服务，以及本机执行任务的程序。被篡改的网页能在加密前读取输入；本机完整权限的程序也不受本工具隔离。</dd></div>
         <div><dt>请留意</dt><dd>申请者名称由 Agent 自行声明。持有填写链接的人都可以提交或拒绝，请核对用途，不要随意转发。公共服务有限流，不承诺可用性；需要独立控制时请自建。</dd></div>
       </dl>

@@ -68,16 +68,13 @@ def test_new_user_defaults_to_public_and_updates_preserve_service(tmp_path):
     target = tmp_path/'client.json'
     configure(None, target)
     assert json.loads(target.read_text())['url'] == installer.PUBLIC_URL
-    assert installer.select_url(None, None, 8787, True) is None
-    assert installer.select_url(None, None, 8787, False) == installer.PUBLIC_URL
-    assert installer.select_url('local', None, 9876, False) == 'http://127.0.0.1:9876'
+    assert installer.select_url(None, None, True) is None
+    assert installer.select_url(None, None, False) == installer.PUBLIC_URL
     with pytest.raises(ValueError):
-        installer.select_url('custom', None, 8787, False)
-    with pytest.raises(ValueError):
-        installer.select_url('local', 'https://other.example', 8787, False)
+        installer.select_url('custom', None, False)
 
 
-def test_local_configuration_needs_no_test_override(tmp_path):
+def test_worker_loopback_development_url_needs_no_override(tmp_path):
     target = tmp_path/'client.json'
     configure('http://127.0.0.1:9876', target)
     from secret_request.client import load_config

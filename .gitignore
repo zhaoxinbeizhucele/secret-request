@@ -19,3 +19,7 @@ windows/obj/
 windows/publish/
 build/
 dist/
+node_modules/
+.wrangler/
+.worker-build/
+.e2e/

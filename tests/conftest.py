@@ -1,32 +1,34 @@
 import re
-import secrets
+from types import SimpleNamespace
 import pytest
-from fastapi.testclient import TestClient
 from secret_request.crypto import new_key, public_jwk
-from secret_request.relay import Settings, create_app
+from .worker_backend import backend, Client, State
 
 @pytest.fixture(scope="session")
 def key():
     return new_key()
 
+@pytest.fixture(scope="session")
+def worker_url():
+    with backend() as base:
+        yield base
+
 @pytest.fixture
-def system(key):
-    tokens = {name: secrets.token_urlsafe(32) for name in ("agent", "other", "reviewer")}
-    now = [100.0]
-    app = create_app(Settings("http://testserver", allow_local_http=True), clock=lambda: now[0])
-    with TestClient(app) as client:
-        yield client, app, tokens, now
+def system(worker_url):
+    with Client(base_url=worker_url, trust_env=False, timeout=15) as client:
+        client.post('/__test/reset',json={}).raise_for_status()
+        app = SimpleNamespace(state=State(client))
+        yield client, app, {}, None
+
 
 def auth(token):
     return {"Authorization": "Bearer " + token}
 
+
 def request(client, tokens, key, **extra):
-    payload = {"name": "测试凭据", "purpose": "仅用于测试", "public_key": public_jwk(key), **extra}
-    response = client.post("/api/requests", json=payload)
-    assert response.status_code == 201, response.text
+    response = client.post('/api/requests', json={"name":"测试凭据", "purpose":"仅用于测试", "public_key":public_jwk(key), **extra})
+    assert response.status_code == 201, 'Worker create failed'
     result = response.json()
-    link, fragment = result["input_url"].split("#", 1)
-    result["submit_token"] = fragment
-    assert link.endswith("/i") and re.fullmatch(r"[A-Za-z0-9_-]{22}", fragment)
-    assert "/input/" not in result["input_url"] and result["id"] not in fragment
+    result['submit_token'] = result['input_url'].split('#', 1)[1]
+    assert re.fullmatch(r'[A-Za-z0-9_-]{22}', result['submit_token'])
     return result

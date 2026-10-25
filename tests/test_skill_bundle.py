@@ -13,10 +13,8 @@ BUNDLE = ROOT / "skills/secret-request"
 
 def test_client_bundle_matches_source():
     # Prevent publishing stale copies after a client change.
-    for name in ("__init__.py", "client.py", "crypto.py", "fields.py", "notifications.py", "session.py", "windows_job.py", "relay.py", "server.py"):
+    for name in ("__init__.py", "client.py", "crypto.py", "fields.py", "notifications.py", "session.py", "windows_job.py"):
         assert (BUNDLE / "scripts/secret_request" / name).read_bytes() == (ROOT / "secret_request" / name).read_bytes()
-    for name in ('index.html', 'app.js', 'crypto.js', 'style.css', 'home.html', 'home.css', 'home.js', 'theme.js'):
-        assert (BUNDLE/'scripts/secret_request/web'/name).read_bytes() == (ROOT/'secret_request/web'/name).read_bytes()
     assert (BUNDLE/'scripts/native-source/windows/Program.cs').read_bytes() == (ROOT/'windows/Program.cs').read_bytes()
     assert (BUNDLE/'scripts/native-source/macos/Notification.swift').read_bytes() == (ROOT/'macos/Notification.swift').read_bytes()
 

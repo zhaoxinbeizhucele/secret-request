@@ -93,7 +93,7 @@ h3{font-size:15.5px;line-height:1.45;letter-spacing:-.012em;font-weight:600;marg
 .install-command button:disabled{opacity:.6;cursor:wait}
 .copy-status{font-size:12.5px;min-height:20px;margin:8px 0 0;color:var(--accent)}
 .requirements{font-size:13px;color:var(--faint);margin:0 0 44px}
-.modes{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.modes{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
 .modes article{display:flex;flex-direction:column;align-items:flex-start;border:1px solid var(--line);border-radius:12px;padding:24px;background:var(--bg-2)}
 .modes article p{margin-bottom:22px;flex:1}
 .tag{font-size:11.5px;color:var(--muted);border:1px solid var(--line-2);border-radius:999px;padding:1px 9px;margin-bottom:16px}

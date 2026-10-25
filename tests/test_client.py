@@ -54,8 +54,8 @@ def test_timeout_kills_child_tree(tmp_path):
     else:
         with pytest.raises(ProcessLookupError): os.kill(pid,0)
 
-def args(tmp_path, tokens, command):
-    config=tmp_path/"client.json"; config.write_text(json.dumps({"url":"http://testserver","notifications":{"local":False}}))
+def args(tmp_path, tokens, command, base):
+    config=tmp_path/"client.json"; config.write_text(json.dumps({"url":str(base),"notifications":{"local":False}}))
     return argparse.Namespace(config=config, allow_local_http=True, command=command, env="REQUEST_TEST_SECRET", name="fake", purpose="test", wait=10, execution_timeout=10)
 
 @pytest.mark.parametrize("session_ttl", [0, 30])
@@ -66,7 +66,7 @@ def test_request_to_child_end_to_end(system,key,tmp_path,capfd,session_ttl,struc
     output=tmp_path/"hash.txt"; secret="FAKE-ONLY-TEST"
     if structured: secret=json.dumps({"username":" FAKE-用户 ", "password":" fake🔒 ", "key":"first\nsecond\n"},ensure_ascii=False)
     code="import os,sys,pathlib,hashlib; v=" + ("os.environ['REQUEST_TEST_SECRET']" if channel=="env" else "sys.stdin.buffer.read().decode('utf-8')") + "; print(v.encode('utf-8')); pathlib.Path(sys.argv[1]).write_text(hashlib.sha256(v.encode()).hexdigest())"
-    arguments=args(tmp_path,tokens,[sys.executable,"-c",code,str(output)])
+    arguments=args(tmp_path,tokens,[sys.executable,"-c",code,str(output)],client.base_url)
     arguments.session_ttl = session_ttl
     arguments.env = "REQUEST_TEST_SECRET" if channel=="env" else None
     if structured:
@@ -105,7 +105,7 @@ def test_request_to_child_end_to_end(system,key,tmp_path,capfd,session_ttl,struc
 def test_decline_does_not_run_child(system,key,tmp_path):
     client,app,tokens,now=system
     output=tmp_path/"never"
-    arguments=args(tmp_path,tokens,[sys.executable,"-c","import pathlib,sys; pathlib.Path(sys.argv[1]).touch()",str(output)])
+    arguments=args(tmp_path,tokens,[sys.executable,"-c","import pathlib,sys; pathlib.Path(sys.argv[1]).touch()",str(output)],client.base_url)
     def decline(created):
         entry=app.state.entries[created["id"]]
         client.post(f"/api/requests/{entry.id}/decline",json={},headers=auth(created['input_url'].split('#')[1]))
@@ -115,7 +115,7 @@ def test_decline_does_not_run_child(system,key,tmp_path):
 def test_failure_after_create_cancels_request(system,key,tmp_path):
     client,app,tokens,now=system
     def fail(created): raise RuntimeError("fake")
-    with pytest.raises(RuntimeError): run(args(tmp_path,tokens,[sys.executable,"-c","pass"]),client=client,on_created=fail)
+    with pytest.raises(RuntimeError): run(args(tmp_path,tokens,[sys.executable,"-c","pass"],client.base_url),client=client,on_created=fail)
     assert all(entry.state=="cancelled" for entry in app.state.entries.values())
 
 def test_windows_cleanup_clears_the_short_link_without_a_capability_probe(system, tmp_path, monkeypatch):
@@ -140,8 +140,8 @@ def test_windows_cleanup_clears_the_short_link_without_a_capability_probe(system
     monkeypatch.setattr(notifications.subprocess, "CREATE_NO_WINDOW", 0x08000000, raising=False)
     monkeypatch.setattr(notifications.subprocess, "run", run_helper)
     monkeypatch.setattr(notifications, "local_notification", lambda message: ("sent", None))
-    arguments = args(tmp_path, tokens, [sys.executable, "-c", "pass"])
-    arguments.config.write_text(json.dumps({"url": "http://testserver", "notifications": {"local": True}}))
+    arguments = args(tmp_path, tokens, [sys.executable, "-c", "pass"],client.base_url)
+    arguments.config.write_text(json.dumps({"url": str(client.base_url), "notifications": {"local": True}}))
     seen = []
 
     def stop(created):
@@ -159,7 +159,7 @@ def test_webhook_only_still_receives_a_short_link(system, tmp_path, monkeypatch)
     from secret_request import notifications as notifications
     client, app, tokens, now = system
     monkeypatch.setattr(notifications.subprocess, "run", lambda *args, **kwargs: pytest.fail("must not launch a helper"))
-    arguments = args(tmp_path, tokens, [sys.executable, "-c", "pass"])
+    arguments = args(tmp_path, tokens, [sys.executable, "-c", "pass"],client.base_url)
     seen = []
 
     def stop(created):
@@ -174,13 +174,13 @@ def test_webhook_only_still_receives_a_short_link(system, tmp_path, monkeypatch)
 
 def test_missing_executable_does_not_prompt(system,key,tmp_path):
     client,app,tokens,now=system
-    with pytest.raises(ValueError): run(args(tmp_path,tokens,["this-program-does-not-exist-123"]),client=client)
+    with pytest.raises(ValueError): run(args(tmp_path,tokens,["this-program-does-not-exist-123"],client.base_url),client=client)
     assert not app.state.entries
 
 
 def test_invalid_fields_do_not_prompt(system, tmp_path):
     client, app, tokens, now = system
-    arguments = args(tmp_path, tokens, [sys.executable, '-c', 'pass'])
+    arguments = args(tmp_path, tokens, [sys.executable, '-c', 'pass'],client.base_url)
     arguments.fields_file = tmp_path/'fields.json'
     arguments.fields_file.write_text('[{"id":"password","label":"Password","type":"file"}]')
     with pytest.raises(ValueError): run(arguments, client=client)
@@ -195,7 +195,7 @@ def test_malformed_values_never_start_consumer(system, tmp_path, capfd, value):
     from .test_fields import FIELDS
     client, app, tokens, now = system
     marker = tmp_path/'must-not-run'
-    arguments = args(tmp_path, tokens, [sys.executable, '-c', 'import pathlib,sys; pathlib.Path(sys.argv[1]).touch()', str(marker)])
+    arguments = args(tmp_path, tokens, [sys.executable, '-c', 'import pathlib,sys; pathlib.Path(sys.argv[1]).touch()', str(marker)],client.base_url)
     arguments.fields_file = tmp_path/'fields.json'
     arguments.fields_file.write_text(json.dumps(FIELDS))
     def approve(created):

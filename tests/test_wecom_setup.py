@@ -22,9 +22,9 @@ spec.loader.exec_module(setup)
 FAKE = 'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=FAKE-PRIVATE-SETUP'
 
 
-def initial(tmp_path):
+def initial(tmp_path, base):
     config = tmp_path/'private/client.json'
-    setup.configure_client('https://custom.example',config,sys.executable,SCRIPTS,local=True)
+    setup.configure_client(base,config,sys.executable,SCRIPTS,local=True)
     return config
 
 
@@ -46,20 +46,20 @@ def submit(created, value):
         client.post(base+'/api/requests/'+rid+'/submit',headers=headers,json=envelope).raise_for_status()
 
 
-def test_local_encrypted_setup_saves_privately_and_preserves_service(tmp_path,capsys,monkeypatch):
-    config = initial(tmp_path)
+def test_worker_encrypted_setup_saves_privately_and_preserves_service(tmp_path,capsys,monkeypatch,worker_url):
+    config = initial(tmp_path, worker_url)
     monkeypatch.setattr(setup.webbrowser,'open',lambda *_: pytest.fail('test must not open user browser'))
     assert setup.setup(config,wait=10,open_browser=False,on_created=lambda c:submit(c,FAKE)) == 0
     value = json.loads(config.read_text())
-    assert value['url']=='https://custom.example' and value['notifications']['local'] is True
+    assert value['url']==worker_url and value['notifications']['local'] is True
     assert value['notifications']['webhook']=={'type':'wecom','url':FAKE}
     assert FAKE not in ''.join(capsys.readouterr())
     if os.name != 'nt':
         assert config.stat().st_mode & 0o777 == 0o600
 
 
-def test_decline_keeps_existing_configuration(tmp_path,capsys):
-    config = initial(tmp_path)
+def test_decline_keeps_existing_configuration(tmp_path,capsys,worker_url):
+    config = initial(tmp_path, worker_url)
     before = config.read_bytes()
     def decline(created):
         parts = urlsplit(created['input_url'])
@@ -71,8 +71,8 @@ def test_decline_keeps_existing_configuration(tmp_path,capsys):
 
 
 @pytest.mark.parametrize('value',[None,'https://untrusted.example/FAKE-PRIVATE','https://qyapi.weixin.qq.com/cgi-bin/webhook/send'])
-def test_invalid_webhook_consumer_keeps_file_and_does_not_echo(tmp_path,value):
-    config = initial(tmp_path)
+def test_invalid_webhook_consumer_keeps_file_and_does_not_echo(tmp_path,value,worker_url):
+    config = initial(tmp_path, worker_url)
     before = config.read_bytes()
     result = subprocess.run([sys.executable,'-I',str(SCRIPTS/'setup_wecom.py'),'--receive','--config',str(config)],
                             input=json.dumps({'webhook':value}).encode(),capture_output=True,timeout=10)
@@ -81,10 +81,10 @@ def test_invalid_webhook_consumer_keeps_file_and_does_not_echo(tmp_path,value):
     assert config.read_bytes() == before
 
 
-def test_actual_setup_entry_exposes_only_filling_capability(tmp_path):
-    config = initial(tmp_path)
+def test_actual_setup_entry_exposes_only_filling_capability(tmp_path,worker_url):
+    config = initial(tmp_path, worker_url)
     process = subprocess.Popen([sys.executable,'-I',str(SCRIPTS/'setup_wecom.py'),
-        '--config',str(config),'--wait','15','--no-open','--local'],stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+        '--config',str(config),'--wait','15','--no-open'],stdout=subprocess.PIPE,stderr=subprocess.PIPE)
     observed = []
     try:
         while True:
@@ -107,8 +107,8 @@ def test_actual_setup_entry_exposes_only_filling_capability(tmp_path):
             process.communicate(timeout=5)
 
 
-def test_interrupted_result_does_not_claim_a_committed_configuration_was_unsaved(tmp_path,monkeypatch,capsys):
-    config = initial(tmp_path)
+def test_interrupted_result_does_not_claim_a_committed_configuration_was_unsaved(tmp_path,monkeypatch,capsys,worker_url):
+    config = initial(tmp_path, worker_url)
     def interrupted_after_write(*args, **kwargs):
         setup.configure_client(None,config,sys.executable,SCRIPTS,webhook_url=FAKE)
         return 130

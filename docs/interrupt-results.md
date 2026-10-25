@@ -31,7 +31,7 @@
 
 ## 实际验证
 
-所有验证使用虚构输入、loopback 中转、临时配置/用户目录和隔离 Python 环境；消费者故意向 stdout/stderr 打印虚构输入，断言客户端输出不含输入、无异常堆栈。没有使用现有客户端配置、真实 webhook 或 Debian 服务。
+所有验证使用虚构输入、本地 Worker、临时配置/用户目录和隔离 Python 环境；消费者故意向 stdout/stderr 打印虚构输入，断言客户端输出不含输入、无异常堆栈。没有使用现有客户端配置、真实 webhook 或 Debian 服务。
 
 最终结果：Windows 全量 **165 passed**；WSL/Linux **153 passed、1 deselected**（打包失败明确记录，浏览器/Node 两组未运行），见 [验证记录](validation/stage-a/README.md)。新增 `tests/test_interrupts.py` 共 22 项，其中 17 项分别在 Windows 与 Linux 送达真实 OS 信号：Windows 在隐藏独立控制台发送 CTRL_C_EVENT，Linux 对独立客户端进程组发送 SIGINT。屏障只控制真实启动、HTTP/RPC 或结果输出的时序；没有用抛 KeyboardInterrupt 代替中断验收。
 
