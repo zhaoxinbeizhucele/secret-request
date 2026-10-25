@@ -86,7 +86,9 @@ def test_request_to_child_end_to_end(system,key,tmp_path,capfd,session_ttl,struc
         from cryptography.hazmat.primitives import hashes
         raw=os.urandom(32); nonce=os.urandom(12)
         envelope={"v":1,"wrapped_key":encode(validate_jwk(entry.public_key).encrypt(raw,padding.OAEP(mgf=padding.MGF1(hashes.SHA256()),algorithm=hashes.SHA256(),label=None))),"nonce":encode(nonce),"ciphertext":encode(AESGCM(raw).encrypt(nonce,secret.encode(),aad(rid)))}
-        assert client.post(f"/api/requests/{rid}/submit",json=envelope,headers=auth(created['input_url'].split('#')[1])).status_code==200
+        link, fragment = created["input_url"].split("#", 1)
+        assert link.endswith("/i") and len(fragment) == 22 and "/input/" not in created["input_url"]
+        assert client.post(f"/api/requests/{rid}/submit",json=envelope,headers=auth(fragment)).status_code==200
     assert run(arguments,client=client,on_created=approve)==0
     assert output.read_text()==hashlib.sha256(secret.encode()).hexdigest()
     captured="".join(capfd.readouterr()); assert secret not in captured and "completed" in captured
@@ -115,6 +117,85 @@ def test_failure_after_create_cancels_request(system,key,tmp_path):
     def fail(created): raise RuntimeError("fake")
     with pytest.raises(RuntimeError): run(args(tmp_path,tokens,[sys.executable,"-c","pass"]),client=client,on_created=fail)
     assert all(entry.state=="cancelled" for entry in app.state.entries.values())
+
+@pytest.mark.parametrize("kind", ["old", "new", "none"])
+def test_short_link_follows_native_helper_capability(system, tmp_path, monkeypatch, kind):
+    from secret_request import notifications as notifications
+    notifications._native_short_links = None
+    client, app, tokens, now = system
+    helper = tmp_path / "SecretRequest.Notify.exe"
+    helper.write_bytes(b"fake-helper")
+    windows_helper = notifications.NATIVE / "windows" / "SecretRequest.Notify.exe"
+    probes, clears = [], []
+
+    def helper_path():
+        return None if kind == "none" else helper
+
+    def run_helper(command, **kwargs):
+        # Delivery.close() on Windows also runs the helper, with --clear.
+        if len(command) == 2 and command[1] == "--supports-short-links":
+            probes.append(command)
+            assert command == [str(helper), "--supports-short-links"]
+            assert kwargs["stdin"] is subprocess.DEVNULL and kwargs["timeout"] == 5
+            return subprocess.CompletedProcess(command, 0 if kind == "new" else 1)
+        if len(command) == 2 and command[1] == "--clear":
+            clears.append(kwargs.get("input"))
+            assert command == [str(windows_helper), "--clear"]
+            assert kwargs["timeout"] == 5
+            return subprocess.CompletedProcess(command, 0)
+        raise AssertionError("unexpected helper command: " + repr(command))
+
+    # Force the Windows cleanup path so Linux CI runs the same --clear call.
+    monkeypatch.setattr(notifications.sys, "platform", "win32")
+    monkeypatch.setattr(notifications.subprocess, "CREATE_NO_WINDOW", 0x08000000, raising=False)
+    monkeypatch.setattr(notifications, "native_helper", helper_path)
+    monkeypatch.setattr(notifications.subprocess, "run", run_helper)
+    monkeypatch.setattr(notifications, "local_notification", lambda message: ("sent", None))
+    arguments = args(tmp_path, tokens, [sys.executable, "-c", "pass"])
+    arguments.config.write_text(json.dumps({"url": "http://testserver", "notifications": {"local": True}}))
+    seen = []
+
+    def stop(created):
+        seen.append(created["input_url"])
+        raise RuntimeError("stop")
+
+    with pytest.raises(RuntimeError, match="stop"):
+        run(arguments, client=client, on_created=stop)
+    path, fragment = seen[0].split("#", 1)
+    if kind == "old":
+        assert "/input/" in path and len(path.rsplit("/input/", 1)[-1]) == 24 and len(fragment) == 43
+    else:
+        assert path.endswith("/i") and "/input/" not in seen[0] and len(fragment) == 22
+    if kind == "none":
+        assert probes == []
+    else:
+        assert notifications.use_short_input_link({"local": True}) is (kind == "new")
+        assert probes == [[str(helper), "--supports-short-links"]]
+    assert len(clears) == 1 and json.loads(clears[0])["url"] == seen[0]
+    notifications._native_short_links = None
+
+
+def test_webhook_only_requests_short_link_without_probing_helper(system, tmp_path, monkeypatch):
+    from secret_request import notifications as notifications
+    notifications._native_short_links = None
+    client, app, tokens, now = system
+    helper = tmp_path / "SecretRequest.Notify.exe"
+    helper.write_bytes(b"fake-helper")
+    monkeypatch.setattr(notifications, "native_helper", lambda: helper)
+    monkeypatch.setattr(notifications.subprocess, "run", lambda *args, **kwargs: pytest.fail("must not probe"))
+    arguments = args(tmp_path, tokens, [sys.executable, "-c", "pass"])
+    seen = []
+
+    def stop(created):
+        seen.append(created["input_url"])
+        raise RuntimeError("stop")
+
+    with pytest.raises(RuntimeError, match="stop"):
+        run(arguments, client=client, on_created=stop)
+    link, fragment = seen[0].split("#", 1)
+    assert link.endswith("/i") and len(fragment) == 22
+    notifications._native_short_links = None
+
 
 def test_missing_executable_does_not_prompt(system,key,tmp_path):
     client,app,tokens,now=system

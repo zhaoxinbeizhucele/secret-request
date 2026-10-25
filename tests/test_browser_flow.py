@@ -30,7 +30,7 @@ def browser_system():
             time.sleep(.1)
         else: pytest.fail('Fixture service did not start')
         with playwright.sync_playwright() as p:
-            browser = p.chromium.launch(channel='msedge', headless=True)
+            browser = launch_browser(p)
             try: yield browser, base
             finally: browser.close()
     finally:
@@ -38,8 +38,24 @@ def browser_system():
         server.wait(timeout=10)
 
 
-def create(base, multiple=True):
-    return httpx.get(base + '/test/create', params={'multiple': str(multiple).lower()}, trust_env=False).json()
+def launch_browser(p):
+    # CI images ship Edge. This environment may only have Chrome or Playwright's Chromium.
+    errors = []
+    for channel in ('msedge', 'chrome'):
+        try:
+            return p.chromium.launch(channel=channel, headless=True)
+        except Exception as exc:
+            errors.append(channel + ': ' + str(exc))
+    try:
+        return p.chromium.launch(headless=True)
+    except Exception as exc:
+        pytest.fail('No Chromium browser: ' + '; '.join(errors + [str(exc)]))
+
+
+def create(base, multiple=True, short=False, purpose=''):
+    return httpx.get(base + '/test/create', params={
+        'multiple': str(multiple).lower(), 'short': str(short).lower(), 'purpose': purpose,
+    }, trust_env=False).json()
 
 
 def fill(page):
@@ -186,5 +202,65 @@ def test_decline_closes_only_after_confirmed_success(browser_system, lost_respon
     assert page.locator('#form').is_hidden()
     assert all(page.locator('#field-' + field).input_value() == '' for field in ['username', 'password', 'key'])
     assert '未提供机密' in page.locator('#close-hint').inner_text()
+    context.close()
+
+
+def test_same_tab_short_link_switches_request(browser_system):
+    browser, base = browser_system
+    context = browser.new_context()
+    page = context.new_page()
+    errors = []
+    page.on('pageerror', lambda e: errors.append(str(e)))
+    first = create(base, multiple=False, short=True, purpose='用途甲')
+    second = create(base, multiple=False, short=True, purpose='用途乙')
+    page.goto(first['url'])
+    playwright.expect(page.locator('#purpose')).to_have_text('用途甲')
+    assert page.evaluate('location.hash') == '' and page.evaluate('location.pathname') == '/i'
+    page.locator('#secret').fill('LEAKED-FROM-A')
+    submits = []
+    page.on('request', lambda request: submits.append(request.url) if request.url.endswith('/submit') else None)
+    # /i#A then /i#B is a same-document hash change. The page must drop A's token and input.
+    try:
+        page.goto(second['url'])
+    except Exception as exc:
+        if 'interrupted' not in str(exc).lower() and 'ERR_ABORTED' not in str(exc):
+            raise
+        page.wait_for_load_state('load')
+    playwright.expect(page.locator('#purpose')).to_have_text('用途乙')
+    assert page.evaluate('location.hash') == ''
+    assert page.locator('#secret').input_value() == ''
+    page.locator('#secret').fill('FAKE-ONLY-TEST')
+    page.locator('#submit').click()
+    page.locator('#close-hint').wait_for(state='visible')
+    assert submits and all(second['id'] in url and first['id'] not in url for url in submits)
+    check(base, second['id'])
+    assert httpx.get(base + '/test/state/' + first['id'], trust_env=False).json() == {'state': 'pending'}
+    assert not errors
+    context.close()
+
+
+def test_same_tab_root_fragment_opens_input(browser_system):
+    browser, base = browser_system
+    context = browser.new_context()
+    page = context.new_page()
+    errors = []
+    page.on('pageerror', lambda error: errors.append(str(error)))
+    created = create(base, multiple=False, short=True, purpose='根路径片段')
+    token = created['url'].split('#', 1)[1]
+    page.goto(base + '/')
+    assert page.locator('#purpose').count() == 0
+    page.goto(base + '/#start')
+    assert page.url.endswith('#start')
+    assert page.locator('h1').inner_text() == '让机密走自己的通道'
+    try:
+        page.goto(base + '/#' + token)
+    except Exception as exc:
+        if 'interrupted' not in str(exc).lower() and 'ERR_ABORTED' not in str(exc):
+            raise
+        page.wait_for_load_state('load')
+    playwright.expect(page.locator('#purpose')).to_have_text('根路径片段')
+    assert page.evaluate('location.pathname') == '/i'
+    assert page.evaluate('location.hash') == ''
+    assert not errors
     context.close()
 

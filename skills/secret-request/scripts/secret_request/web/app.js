@@ -1,8 +1,31 @@
 import { encryptSecret } from "./crypto.js";
 
 const $ = (id) => document.getElementById(id);
-const requestId = location.pathname.split("/")[2];
-const token = location.hash.slice(1);
+const legacyMatch = location.pathname.match(/^\/input\/([A-Za-z0-9_-]{24})$/);
+const legacyId = legacyMatch ? legacyMatch[1] : "";
+let ignoreHashChange = false;
+let token = "";
+function takeToken() {
+  const value = location.hash.slice(1);
+  const ok = /^[A-Za-z0-9_-]{22}$/.test(value) || /^[A-Za-z0-9_-]{43}$/.test(value);
+  if (!ok) return "";
+  // Drop the bearer token from the address bar. replaceState does not emit hashchange.
+  if (location.hash) {
+    ignoreHashChange = true;
+    history.replaceState(null, "", location.pathname + location.search);
+    ignoreHashChange = false;
+  }
+  return value;
+}
+addEventListener("hashchange", () => {
+  // A new fragment is another input link in this tab. Reload so polling, the
+  // bearer token and any typed secret from the previous link cannot leak into it.
+  if (ignoreHashChange || !location.hash) return;
+  location.reload();
+});
+token = takeToken();
+const tokenOk = Boolean(token);
+let requestId = legacyId;
 let current, busy = false, pendingEnvelope, countdown = 0, rendered = false, attemptedSubmission = false, attemptedDecline = false, finished = false;
 const fieldInputs = new Map();
 const states = {
@@ -72,7 +95,10 @@ function setBusy(value, action = "submit") {
 function error(message) { $("error").textContent = message; $("error").hidden = false; }
 async function api(action = "", body) {
   const deadline = AbortSignal.timeout(12000);
-  const response = await fetch(`/api/requests/${encodeURIComponent(requestId)}${action}`, {
+  const path = (action || requestId)
+    ? `/api/requests/${encodeURIComponent(requestId)}${action}`
+    : "/api/input";
+  const response = await fetch(path, {
     method: body === undefined ? "GET" : "POST", cache: "no-store", redirect: "error",
     signal: deadline,
     headers: { Authorization: "Bearer " + token, ...(body === undefined ? {} : { "Content-Type": "application/json" }) },
@@ -86,6 +112,10 @@ async function refresh() {
   try {
     current = await api();
     if (finished) return;
+    if (!current || !/^[A-Za-z0-9_-]{24}$/.test(current.id) || (legacyId && current.id !== legacyId)) {
+      throw new Error("404");
+    }
+    requestId = current.id;
     countdown = performance.now() + current.remaining_seconds * 1000;
     $("title").textContent = current.name;
     $("agent").textContent = (current.agent || "未注明 Agent") + "（自行声明）";
@@ -157,7 +187,7 @@ $("form").onsubmit = async (event) => {
   if (!pendingEnvelope && !value) { error("请输入本次要提供的机密，或选择拒绝请求。"); return; }
   setBusy(true);
   try {
-    pendingEnvelope ||= await encryptSecret(value, current.public_key, requestId);
+    pendingEnvelope ||= await encryptSecret(value, current.public_key, current.id);
     clearInput();
     attemptedSubmission = true;
     await api("/submit", pendingEnvelope);
@@ -179,7 +209,7 @@ $("decline").onclick = async () => {
   }
   finally { setBusy(false); }
 };
-if (!requestId || !token) {
+if (!tokenOk) {
   $("status").textContent = "请从本次申请的通知链接打开输入页。";
 } else if (!crypto.subtle) {
   $("status").textContent = "此页面需要安全的 HTTPS 连接，请使用通知中的原始地址。";

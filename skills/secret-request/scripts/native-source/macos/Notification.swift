@@ -13,11 +13,19 @@ struct Notice: Decodable {
 
 func inputDestination(_ id: String, _ value: String) -> URL? {
     guard id.range(of: "^[A-Za-z0-9_-]{24}$", options: .regularExpression) != nil,
-          let url = URL(string: value), url.scheme == "https", url.host != nil,
-          url.user == nil, url.password == nil, url.query == nil, url.path == "/input/" + id,
-          let fragment = url.fragment,
-          fragment.range(of: "^[A-Za-z0-9_-]{43}$", options: .regularExpression) != nil else { return nil }
-    return url
+          value.allSatisfy({ character in
+              guard let code = character.asciiValue else { return false }
+              return code >= 32 && code != 127
+          }),
+          !value.contains("@"), !value.contains("?"),
+          let url = URL(string: value), url.scheme == "https",
+          let host = url.host, !host.isEmpty,
+          url.user == nil, url.password == nil, url.query == nil,
+          let fragment = url.fragment else { return nil }
+    let legacy = url.path == "/input/" + id && fragment.range(of: "^[A-Za-z0-9_-]{43}$", options: .regularExpression) != nil
+    let shortLink = (url.path == "/i" || url.path == "/" || url.path.isEmpty)
+        && fragment.range(of: "^[A-Za-z0-9_-]{22}$", options: .regularExpression) != nil
+    return (legacy || shortLink) ? url : nil
 }
 
 final class Delegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
@@ -72,6 +80,11 @@ final class Delegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterD
         center.removeDeliveredNotifications(withIdentifiers: [notice.id])
         center.removePendingNotificationRequests(withIdentifiers: [notice.id])
     }
+}
+
+// Exit before reading stdin. Shipped builds do not recognize this flag and exit 1.
+if CommandLine.arguments.count == 2, CommandLine.arguments[1] == "--supports-short-links" {
+    exit(0)
 }
 
 do {

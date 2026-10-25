@@ -12,11 +12,26 @@ static class Program
 {
     static readonly JsonSerializerOptions Json = new() { PropertyNameCaseInsensitive = true };
 
+    static bool FragmentToken(string fragment, int tokenLength)
+    {
+        // System.Uri.Fragment keeps the leading '#', so 43 chars are length 44 and 22 chars are length 23.
+        if (fragment.Length != tokenLength + 1 || fragment[0] != '#') return false;
+        for (var i = 1; i < fragment.Length; i++)
+        {
+            var c = fragment[i];
+            if (!char.IsAsciiLetterOrDigit(c) && c != '-' && c != '_') return false;
+        }
+        return true;
+    }
+
     internal static ToastContentBuilder Build(Notice notice)
     {
+        if (notice.Url.Any(c => c < ' ' || c == '\u007f') || notice.Url.Contains('@') || notice.Url.Contains('?'))
+            throw new ArgumentException("Invalid notification");
         var uri = new Uri(notice.Url);
-        if (uri.Scheme != "https" || uri.UserInfo != "" || uri.Query != "" ||
-            uri.AbsolutePath != "/input/" + notice.Id || uri.Fragment.Length != 44 ||
+        var legacy = uri.AbsolutePath == "/input/" + notice.Id && FragmentToken(uri.Fragment, 43);
+        var shortLink = (uri.AbsolutePath == "/i" || uri.AbsolutePath == "/") && FragmentToken(uri.Fragment, 22);
+        if (uri.Scheme != "https" || uri.UserInfo != "" || uri.Query != "" || uri.Host.Length == 0 || !(legacy || shortLink) ||
             notice.Id.Length != 24 || notice.Id.Any(c => !char.IsAsciiLetterOrDigit(c) && c != '-' && c != '_') ||
             notice.ExpiresInSeconds <= 0 || notice.ExpiresInSeconds > 1800)
             throw new ArgumentException("Invalid notification");
@@ -29,14 +44,32 @@ static class Program
     {
         try
         {
+            // Exit before reading stdin. Shipped builds do not recognize this flag and return 1.
+            if (args.SequenceEqual(new[] { "--supports-short-links" }))
+                return 0;
             if (args.SequenceEqual(new[] { "--self-test" }))
             {
                 var xml = Build(new Notice(new string('a', 24), "Agent", "用途",
                     "https://example.test/input/" + new string('a', 24) + "#" + new string('b', 43), 600))
                     .GetToastContent().GetContent();
                 if (!xml.Contains("activationType=\"protocol\"") || !xml.Contains("https://example.test/input/")) return 1;
-                try { Build(new Notice(new string('a', 24), "Agent", "用途", "file:///etc/passwd", 600)); return 1; }
-                catch (ArgumentException) { }
+                var shortXml = Build(new Notice(new string('a', 24), "Agent", "用途",
+                    "https://example.test/i#" + new string('c', 22), 600)).GetToastContent().GetContent();
+                if (!shortXml.Contains("https://example.test/i#")) return 1;
+                var rootXml = Build(new Notice(new string('a', 24), "Agent", "用途",
+                    "https://example.test/#" + new string('c', 22), 600)).GetToastContent().GetContent();
+                if (!rootXml.Contains("https://example.test/#")) return 1;
+                foreach (var bad in new[] {
+                    "file:///etc/passwd",
+                    "https://example.test/i#" + new string('c', 43),
+                    "https://example.test/input/" + new string('a', 24) + "#" + new string('c', 22),
+                    "https://@example.test/i#" + new string('c', 22),
+                    "https://example.test/i?#" + new string('c', 22),
+                    "https://example.test/i#" + new string('c', 22) + "\n" })
+                {
+                    try { Build(new Notice(new string('a', 24), "Agent", "用途", bad, 600)); return 1; }
+                    catch (ArgumentException) { }
+                }
                 Console.WriteLine("Notification protocol and URL checks passed.");
                 return 0;
             }

@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+from urllib.parse import urlsplit
 
 import httpx
 import pytest
@@ -28,13 +29,18 @@ def initial(tmp_path):
 
 
 def submit(created, value):
-    base = created['input_url'].split('/input/')[0]
-    headers = {'Authorization':'Bearer '+created['input_url'].split('#')[1]}
-    rid = created['id']
+    parts = urlsplit(created['input_url'])
+    base = f"{parts.scheme}://{parts.netloc}"
+    headers = {'Authorization':'Bearer '+parts.fragment}
     with httpx.Client(trust_env=False,timeout=5) as client:
-        details = client.get(base+'/api/requests/'+rid,headers=headers).json()
+        details = client.get(base+'/api/input',headers=headers)
+        details.raise_for_status()
+        body = details.json()
+        rid = body['id']
+        if 'id' in created:
+            assert created['id'] == rid
         raw, nonce = os.urandom(32), os.urandom(12)
-        envelope = {'v':1,'wrapped_key':encode(validate_jwk(details['public_key']).encrypt(raw,padding.OAEP(
+        envelope = {'v':1,'wrapped_key':encode(validate_jwk(body['public_key']).encrypt(raw,padding.OAEP(
             mgf=padding.MGF1(hashes.SHA256()),algorithm=hashes.SHA256(),label=None))),
             'nonce':encode(nonce),'ciphertext':encode(AESGCM(raw).encrypt(nonce,json.dumps({'webhook':value}).encode(),aad(rid)))}
         client.post(base+'/api/requests/'+rid+'/submit',headers=headers,json=envelope).raise_for_status()
@@ -56,9 +62,9 @@ def test_decline_keeps_existing_configuration(tmp_path,capsys):
     config = initial(tmp_path)
     before = config.read_bytes()
     def decline(created):
-        base = created['input_url'].split('/input/')[0]
-        httpx.post(base+'/api/requests/'+created['id']+'/decline',trust_env=False,
-                   headers={'Authorization':'Bearer '+created['input_url'].split('#')[1]},json={}).raise_for_status()
+        parts = urlsplit(created['input_url'])
+        httpx.post(f"{parts.scheme}://{parts.netloc}/api/requests/{created['id']}/decline",trust_env=False,
+                   headers={'Authorization':'Bearer '+parts.fragment},json={}).raise_for_status()
     assert setup.setup(config,wait=10,open_browser=False,on_created=decline) == 2
     assert config.read_bytes() == before
     assert 'wecom_setup_not_saved' in capsys.readouterr().out
@@ -88,7 +94,9 @@ def test_actual_setup_entry_exposes_only_filling_capability(tmp_path):
             observed.append(event)
             if event['status']=='wecom_setup_page':
                 assert event['browser_opened'] is False and 'receive_token' not in event
-                submit({'id':event['input_url'].split('/input/')[1].split('#')[0], 'input_url':event['input_url']},FAKE)
+                link = urlsplit(event['input_url'])
+                assert link.path == '/i' and len(link.fragment) == 22 and not link.query
+                submit({'input_url':event['input_url']},FAKE)
                 break
         output, errors = process.communicate(timeout=15)
         assert process.returncode == 0 and b'wecom_configured' in output

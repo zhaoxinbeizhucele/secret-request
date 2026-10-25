@@ -83,3 +83,80 @@ def test_interrupted_webhook_retires_native_notification(monkeypatch):
         n.notify({'url':'https://relay.test','notifications':{'local':True,'webhook':{}}},
                  {'id':'a'*24,'input_url':message()['url'],'remaining_seconds':600}, 'name','purpose','Agent')
     assert closed == ['a'*24]
+
+
+def test_legacy_and_short_input_links_are_accepted():
+    base, rid = 'https://relay.test', 'a'*24
+    legacy = base + '/input/' + rid + '#' + 'b'*43
+    short = base + '/i#' + 'c'*22
+    root = base + '/#' + 'd'*22
+    bare = base + '#' + 'e'*22
+    for url in (legacy, short, root, bare):
+        assert n.input_url(base, {'id': rid, 'input_url': url}) == url
+    assert rid not in short
+    assert n.input_url(base + ':8443', {'id': rid, 'input_url': base + ':8443/i#' + 'c'*22}) == base + ':8443/i#' + 'c'*22
+
+
+@pytest.mark.parametrize('url,rid', [
+    ('https://evil.test/i#' + 'c'*22, 'a'*24),
+    ('http://relay.test/i#' + 'c'*22, 'a'*24),
+    ('https://user:password@relay.test/i#' + 'c'*22, 'a'*24),
+    ('https://relay.test/i?next=1#' + 'c'*22, 'a'*24),
+    ('https://relay.test/?next=1#' + 'c'*22, 'a'*24),
+    ('https://relay.test:8443/i#' + 'c'*22, 'a'*24),
+    ('https://relay.test/i#' + 'c'*21, 'a'*24),
+    ('https://relay.test/i#' + 'c'*23, 'a'*24),
+    ('https://relay.test/i#' + 'b'*43, 'a'*24),
+    ('https://relay.test/i/#' + 'c'*22, 'a'*24),
+    ('https://relay.test/i/extra#' + 'c'*22, 'a'*24),
+    ('https://relay.test/input/' + 'a'*24 + '#' + 'c'*22, 'a'*24),
+    ('https://relay.test/input/' + 'b'*24 + '#' + 'b'*43, 'a'*24),
+    ('https://relay.test/#' + 'c'*43, 'a'*24),
+    ('https://relay.test/i#' + 'c'*21 + '+', 'a'*24),
+    ('https://relay.test/i#' + 'c'*22, 'a'*23),
+    ('https://relay.test/i#' + 'c'*22, '../' + 'a'*21),
+    ('javascript:alert(1)#' + 'c'*22, 'a'*24),
+    ('https://relay.test/i#' + 'c'*22, None),
+    ('https://@relay.test/i#' + 'c'*22, 'a'*24),
+    ('https://:@relay.test/i#' + 'c'*22, 'a'*24),
+    ('https://relay.test/i?#' + 'c'*22, 'a'*24),
+    ('https://relay.test/i#' + 'c'*22 + '\n', 'a'*24),
+    ('https://relay.test/i#' + 'c'*10 + '\n' + 'c'*12, 'a'*24),
+    ('https://relay.test/\ni#' + 'c'*22, 'a'*24),
+    ('https://relay.test/i#' + 'c'*22 + '\r', 'a'*24),
+    ('https://relay.test/i#' + 'c'*22 + '\t', 'a'*24),
+    ('https://relay.test/i#' + 'c'*22 + '\x7f', 'a'*24),
+])
+def test_malformed_input_links_are_rejected(url, rid):
+    with pytest.raises(ValueError):
+        n.input_url('https://relay.test', {'id': rid, 'input_url': url})
+
+
+def test_non_string_link_is_rejected():
+    with pytest.raises(ValueError):
+        n.input_url('https://relay.test', {'id': 'a'*24, 'input_url': None})
+
+
+def test_short_link_notification_keeps_only_the_input_capability(monkeypatch):
+    seen = []
+    monkeypatch.setattr(n, 'local_notification', lambda message: (seen.append(message.copy()) or 'sent', None))
+    url = 'https://relay.test/i#' + 'c'*22
+    def transport(request):
+        data = json.loads(request.content)
+        assert data['input_url'] == url and 'receive_token' not in data and 'public_key' not in data
+        return httpx.Response(204)
+    created = {'id': 'a'*24, 'input_url': url, 'remaining_seconds': 600, 'receive_token': 'PRIVATE-RECEIVE'}
+    config = {'url': 'https://relay.test', 'notifications': {'local': True,
+              'webhook': {'type': 'generic', 'url': 'https://hook.test/', 'headers': {}}}}
+    with httpx.Client(transport=httpx.MockTransport(transport)) as client:
+        result = n.notify(config, created, '申请', '用于本次测试', 'Agent', hook_client=client)
+        result.close()
+    assert seen[0]['url'] == url and 'PRIVATE-RECEIVE' not in json.dumps(seen)
+
+
+def test_bad_short_link_is_never_notified(monkeypatch):
+    monkeypatch.setattr(n, 'local_notification', lambda _: pytest.fail('must not notify'))
+    with pytest.raises(ValueError):
+        n.notify({'url': 'https://relay.test', 'notifications': {'local': True}},
+                 {'id': 'a'*24, 'input_url': 'https://relay.test/i#' + 'c'*43, 'remaining_seconds': 600},
+                 'name', 'purpose', 'Agent')

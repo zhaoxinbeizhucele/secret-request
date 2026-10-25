@@ -88,6 +88,24 @@ secret-request --agent-name Codex --name "测试库登录" --purpose "查询已�
 
 企微消息只包含名称、用途和本次填写链接；webhook 由客户端调用，服务不保存或调用 webhook。失败最多重试一次，使用同一申请。发送成功不等于用户已处理。没有通知配置时，仅在明确需要备用链接时用 `--show-link`。
 
+### 填写链接
+
+中转默认仍返回旧链接，因为已经部署的客户端只接受这一种格式：
+
+`https://<服务>/input/<24 字符申请 ID>#<43 字符填写凭据>`
+
+43 个字符对应 256 位（`token_urlsafe(32)`）。在当前公共服务域名上，整条链接是 106 个字符。
+
+新客户端在本机通知程序能打开短链接时，创建申请发送请求头 `X-Secret-Request-Link: short`。只使用 webhook，或当前系统没有本机通知程序时，也发送该请求头。随安装包提供的 Windows 通知程序只接受旧链接；客户端用 `--supports-short-links` 探测，旧程序退出非 0，此时不发送该请求头。安装时加上 `--build-notifier`，或运行 `python3 scripts/build_native.py`，重新编译通知程序后，本机通知才会使用短链接。新中转只在看到这个精确值时返回短链接：
+
+`https://<服务>/i#<22 字符填写凭据>`
+
+22 个字符对应 128 位（`token_urlsafe(16)`）。同一域名上是 56 个字符，例如 `https://secret-request.eicai.cc/i#` 再加 22 个字符。申请 ID 不放进链接。服务只保存填写凭据的 SHA-256，并按这个哈希查找申请。填写页带着同一凭据调用 `GET /api/input`，取回申请 ID 和公钥；AES-GCM 的附加数据仍是 `secret-request:v1:` 加上该 ID。领取凭据仍是 256 位，不出现在链接里。短链接不改变一次性提交、最长 30 分钟、撤销和创建频率限制。这次不新增必填服务配置，也不改域名。可选配置是填写页查询频率 `input_lookups_per_minute`（环境变量 `SECRET_REQUEST_INPUT_LOOKUPS_PER_MINUTE`，默认每来源每分钟 120 次，范围 1–1024）。
+
+滚动时两边可以分开升级。只升级中转时，旧客户端不发送该请求头，继续收到旧链接。只升级客户端时，旧中转忽略这个请求头并返回旧链接，新客户端两种都接受。本机通知程序仍是旧版本时，新客户端也不请求短链接。中转、客户端和本机通知程序都更新之后，才会发出短链接。旧路径 `/input/<申请 ID>` 继续提供填写页，已经创建的申请仍用原来的凭据。
+
+`/#<22 字符凭据>` 也会打开填写页：首页发现片段是填写凭据时转到 `/i`。客户端同样接受这个根路径形式，方便以后把页面放在更短域名的 `/` 上。当前发出的链接仍是 `/i#凭据`，避免先闪一下首页。
+
 默认等待 600 秒。提交确认后尝试关页，不能自动关闭时显示手动关闭提示。拒绝、取消或过期不执行任务。默认建立空闲 300 秒的本机会话，合法执行结束后重新计时；状态查询不续期。
 
 ```sh
@@ -131,7 +149,7 @@ docker compose --env-file .env -f compose.proxy.yaml up -d
 
 按 `deploy/nginx.conf.example` 配置独立站点与证书。代理必须用真实连接来源覆盖 `X-Forwarded-For`，不可透传公网任意转发头；此 Compose 才会信任 host proxy。不要将该 relay 端口改为公网监听。若前面还有 CDN，先配置可信 CDN 地址范围再恢复真实 IP。
 
-两个 Compose 文件是替代方案，不要叠加。默认专用网段分别为 172.30.80.0/29 和 172.30.81.0/29；若与现有网络冲突，在 .env 设置 RELAY_SUBNET，并同步修改对应的 RELAY_PROXY_ADDRESS（Caddy）或 RELAY_GATEWAY（主机反代）。转发头信任仅限指定代理地址。单 worker、内存状态；不横向扩容共享申请。默认最多 128 个在途申请、每来源 8 个、每来源每分钟 20 次、全局每分钟 120 次。使用 `SECRET_REQUEST_MAX_REQUESTS`、`SECRET_REQUEST_MAX_REQUESTS_PER_IP`、`SECRET_REQUEST_REQUESTS_PER_MINUTE`、`SECRET_REQUEST_GLOBAL_REQUESTS_PER_MINUTE` 可调整，各项 1–1024。代理有请求体和读写超时限制，应用也有 100000 字节与 15 秒请求体读取限制。
+两个 Compose 文件是替代方案，不要叠加。默认专用网段分别为 172.30.80.0/29 和 172.30.81.0/29；若与现有网络冲突，在 .env 设置 RELAY_SUBNET，并同步修改对应的 RELAY_PROXY_ADDRESS（Caddy）或 RELAY_GATEWAY（主机反代）。转发头信任仅限指定代理地址。单 worker、内存状态；不横向扩容共享申请。默认最多 128 个在途申请、每来源 8 个、每来源每分钟 20 次、全局每分钟 120 次、填写页 `/api/input` 每来源每分钟 120 次。使用 `SECRET_REQUEST_MAX_REQUESTS`、`SECRET_REQUEST_MAX_REQUESTS_PER_IP`、`SECRET_REQUEST_REQUESTS_PER_MINUTE`、`SECRET_REQUEST_GLOBAL_REQUESTS_PER_MINUTE`、`SECRET_REQUEST_INPUT_LOOKUPS_PER_MINUTE` 可调整，各项 1–1024。代理有请求体和读写超时限制，应用也有 100000 字节与 15 秒请求体读取限制。
 
 停止服务用对应的 `docker compose ... down`；未交付申请随重启失效，已领取的本机会话不受影响。保留旧镜像 digest 和 Compose 环境即可回退。不要删除 Caddy 证书卷来更新服务。
 
