@@ -31,14 +31,15 @@ def test_new_user_initializes_with_only_url(tmp_path):
         assert target.parent.stat().st_mode & 0o777 == 0o700
 
 
-def test_legacy_upgrade_preserves_notifications_and_removes_token(tmp_path, monkeypatch, capsys):
-    monkeypatch.setenv('TEST_SECRET_REQUEST_HOOK','https://notify.example/hook')
+def test_obsolete_enrollment_key_is_rejected_without_rewriting_config(tmp_path, capsys):
     target = tmp_path/'client.json'
-    notifications = {'local':False,'webhook':{'type':'generic','url_env':'TEST_SECRET_REQUEST_HOOK'}}
-    target.write_text(json.dumps({'url':'https://relay.example','request_token':'FAKE-OLD-PRIVATE',
-                                 'notifications':notifications}))
-    assert configure(None, target)
-    assert json.loads(target.read_text()) == {'url':'https://relay.example','notifications':notifications}
+    original = json.dumps({'url':'https://relay.example','request_token':'FAKE-OLD-PRIVATE',
+                           'notifications':{'local':False}})
+    target.write_text(original)
+    with pytest.raises(ValueError, match='Invalid existing client configuration') as error:
+        configure(None, target)
+    assert 'FAKE' not in str(error.value)
+    assert target.read_text() == original
     assert capsys.readouterr() == ('','')
 
 

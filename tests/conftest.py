@@ -21,16 +21,12 @@ def auth(token):
     return {"Authorization": "Bearer " + token}
 
 def request(client, tokens, key, **extra):
-    short_link = extra.pop("short_link", False)
     payload = {"name": "测试凭据", "purpose": "仅用于测试", "public_key": public_jwk(key), **extra}
-    headers = {"X-Secret-Request-Link": "short"} if short_link else None
-    response = client.post("/api/requests", json=payload, headers=headers)
+    response = client.post("/api/requests", json=payload)
     assert response.status_code == 201, response.text
     result = response.json()
     link, fragment = result["input_url"].split("#", 1)
     result["submit_token"] = fragment
-    if short_link:
-        assert link.endswith("/i") and re.fullmatch(r"[A-Za-z0-9_-]{22}", fragment)
-    else:
-        assert link.endswith("/input/" + result["id"]) and re.fullmatch(r"[A-Za-z0-9_-]{43}", fragment)
+    assert link.endswith("/i") and re.fullmatch(r"[A-Za-z0-9_-]{22}", fragment)
+    assert "/input/" not in result["input_url"] and result["id"] not in fragment
     return result

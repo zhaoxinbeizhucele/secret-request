@@ -118,26 +118,13 @@ def test_failure_after_create_cancels_request(system,key,tmp_path):
     with pytest.raises(RuntimeError): run(args(tmp_path,tokens,[sys.executable,"-c","pass"]),client=client,on_created=fail)
     assert all(entry.state=="cancelled" for entry in app.state.entries.values())
 
-@pytest.mark.parametrize("kind", ["old", "new", "none"])
-def test_short_link_follows_native_helper_capability(system, tmp_path, monkeypatch, kind):
+def test_windows_cleanup_clears_the_short_link_without_a_capability_probe(system, tmp_path, monkeypatch):
     from secret_request import notifications as notifications
-    notifications._native_short_links = None
     client, app, tokens, now = system
-    helper = tmp_path / "SecretRequest.Notify.exe"
-    helper.write_bytes(b"fake-helper")
     windows_helper = notifications.NATIVE / "windows" / "SecretRequest.Notify.exe"
-    probes, clears = [], []
-
-    def helper_path():
-        return None if kind == "none" else helper
+    clears = []
 
     def run_helper(command, **kwargs):
-        # Delivery.close() on Windows also runs the helper, with --clear.
-        if len(command) == 2 and command[1] == "--supports-short-links":
-            probes.append(command)
-            assert command == [str(helper), "--supports-short-links"]
-            assert kwargs["stdin"] is subprocess.DEVNULL and kwargs["timeout"] == 5
-            return subprocess.CompletedProcess(command, 0 if kind == "new" else 1)
         if len(command) == 2 and command[1] == "--clear":
             clears.append(kwargs.get("input"))
             assert command == [str(windows_helper), "--clear"]
@@ -151,7 +138,6 @@ def test_short_link_follows_native_helper_capability(system, tmp_path, monkeypat
     monkeypatch.setattr(notifications, "current_platform", lambda: "win32")
     assert sys.platform == platform
     monkeypatch.setattr(notifications.subprocess, "CREATE_NO_WINDOW", 0x08000000, raising=False)
-    monkeypatch.setattr(notifications, "native_helper", helper_path)
     monkeypatch.setattr(notifications.subprocess, "run", run_helper)
     monkeypatch.setattr(notifications, "local_notification", lambda message: ("sent", None))
     arguments = args(tmp_path, tokens, [sys.executable, "-c", "pass"])
@@ -165,27 +151,14 @@ def test_short_link_follows_native_helper_capability(system, tmp_path, monkeypat
     with pytest.raises(RuntimeError, match="stop"):
         run(arguments, client=client, on_created=stop)
     path, fragment = seen[0].split("#", 1)
-    if kind == "old":
-        assert "/input/" in path and len(path.rsplit("/input/", 1)[-1]) == 24 and len(fragment) == 43
-    else:
-        assert path.endswith("/i") and "/input/" not in seen[0] and len(fragment) == 22
-    if kind == "none":
-        assert probes == []
-    else:
-        assert notifications.use_short_input_link({"local": True}) is (kind == "new")
-        assert probes == [[str(helper), "--supports-short-links"]]
+    assert path.endswith("/i") and "/input/" not in seen[0] and len(fragment) == 22
     assert len(clears) == 1 and json.loads(clears[0])["url"] == seen[0]
-    notifications._native_short_links = None
 
 
-def test_webhook_only_requests_short_link_without_probing_helper(system, tmp_path, monkeypatch):
+def test_webhook_only_still_receives_a_short_link(system, tmp_path, monkeypatch):
     from secret_request import notifications as notifications
-    notifications._native_short_links = None
     client, app, tokens, now = system
-    helper = tmp_path / "SecretRequest.Notify.exe"
-    helper.write_bytes(b"fake-helper")
-    monkeypatch.setattr(notifications, "native_helper", lambda: helper)
-    monkeypatch.setattr(notifications.subprocess, "run", lambda *args, **kwargs: pytest.fail("must not probe"))
+    monkeypatch.setattr(notifications.subprocess, "run", lambda *args, **kwargs: pytest.fail("must not launch a helper"))
     arguments = args(tmp_path, tokens, [sys.executable, "-c", "pass"])
     seen = []
 
@@ -197,7 +170,6 @@ def test_webhook_only_requests_short_link_without_probing_helper(system, tmp_pat
         run(arguments, client=client, on_created=stop)
     link, fragment = seen[0].split("#", 1)
     assert link.endswith("/i") and len(fragment) == 22
-    notifications._native_short_links = None
 
 
 def test_missing_executable_does_not_prompt(system,key,tmp_path):

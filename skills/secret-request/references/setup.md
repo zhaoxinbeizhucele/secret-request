@@ -4,7 +4,7 @@
 
 ## 选择中转方式
 
-已有配置时优先复用。新用户未指定服务时使用默认公共服务 `https://secret-request.eicai.cc`，告知用户该选择；用户希望自建时提供下列选择，无需要求填写尚不存在的配置文件：
+已有配置时优先复用。新用户未指定服务时使用默认公共服务 `https://sr.eicai.cc`，告知用户该选择；用户希望自建时提供下列选择，无需要求填写尚不存在的配置文件：
 
 - 公共：`--mode public`（新安装省略参数也是公共服务）。
 - 本机：`--mode local --port 8787`，无需 Docker、域名或部署，只能本机浏览器填写。
@@ -40,6 +40,6 @@ python3 -I '<skill目录>/scripts/install.py' --mode public --configure-wecom
 
 `npx skills update` 后运行安装器更新环境/入口。省略模式与 URL 时保留原配置；显式指定另一服务会报错并保留旧配置。要并行使用另一模式，指定独立的 `--application-directory` 和 `--config-directory`，不要覆盖已有任务的配置。
 
-`--no-local-notification` 可显式关闭 Windows/macOS 本机通知，`--local-notification` 可重新开启；这两个选项均不修改已配置的 webhook。macOS 需要 --build-notifier 和 Apple Command Line Tools。已随包提供的 Windows/macOS 通知程序只打开旧填写链接；`--build-notifier` 或 `python3 scripts/build_native.py` 重新编译后，本机通知才使用短链接。Linux 本机通知返回 unsupported，使用已配置的 webhook。旧通知配置会保留。0.2 的 request_token 会在升级时移除。
+`--no-local-notification` 可显式关闭 Windows/macOS 本机通知，`--local-notification` 可重新开启；这两个选项均不修改已配置的 webhook。填写链接只有 `/i#<22 字符凭据>`。Windows 通知程序已随包提供，能打开这种链接。macOS 没有随包二进制，需要 Apple Command Line Tools，并用 `--build-notifier` 或 `python3 scripts/build_native.py` 在本机编译。Linux 本机通知返回 unsupported，使用已配置的 webhook。已有通知设置会保留。含 `request_token` 的配置无效，安装器不会改写它。
 
 skill 路径变化或被删除会使命令入口失效，重新运行当前 skill 的安装器。安装服务仅适用于当前使用端；不要为了修复本机配置而重启已有中转服务。

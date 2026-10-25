@@ -2,7 +2,7 @@
 
 让机密走自己的通道。Agent 发起申请，企微通知本人，浏览器加密填写，本机客户端解密后直接交给任务程序。聊天里只返回状态和退出码。
 
-官网与默认公共中转：**https://secret-request.eicai.cc**。服务无需账号、设备登记或长期接入 token；也可以在本机运行，或部署自己的 HTTPS 中转。
+官网与默认公共中转：**https://sr.eicai.cc**。服务无需账号、设备登记或长期接入 token；也可以在本机运行，或部署自己的 HTTPS 中转。
 
 ## 添加到 Agent
 
@@ -20,7 +20,7 @@ npx skills add zhaoxinbeizhucele/secret-request -g
 
 | 模式 | 行为 |
 | --- | --- |
-| 默认 / `--mode public` | 使用 `https://secret-request.eicai.cc`，无需部署 |
+| 默认 / `--mode public` | 使用 `https://sr.eicai.cc`，无需部署 |
 | `--mode local` | 使用 `http://127.0.0.1:8787`，由 Agent 启动本机服务器 |
 | `--mode custom --url https://relay.example.com` | 使用自己部署的 HTTPS 服务 |
 
@@ -42,9 +42,9 @@ python3 -I '<skill目录>/scripts/install.py' --mode public --configure-wecom
 ~/.local/share/secret-request/secret-request --check-service
 ```
 
-本机通知默认开启，配置企微后同时发送本机通知和企微 webhook；配置一个渠道不会关闭另一个。`--configure-wecom` 不依赖已有通知渠道：公共/自建模式使用当前选中的中转并打开一次性填写页，本机模式临时启动 loopback 配置页。提交后地址保存到受保护的本机配置；拒绝或过期保留原配置，不发送群消息。没有桌面浏览器时可直接运行 `scripts/setup_wecom.py --config <client.json> --no-open` 获得填写链接；loopback 链接仍仅限同电脑。填写后通过原工具进程状态确认 `wecom_configured`，不要要求用户回聊天确认。已有 `SECRET_REQUEST_WEBHOOK` 时，新安装自动引用；也可用 `--webhook-env` 指定其他变量名。变量需在客户端进程环境中可用。仅将变量名写入配置，完整 webhook 不进入日志或仓库。旧版已保存的通知设置继续沿用。
+本机通知默认开启，配置企微后同时发送本机通知和企微 webhook；配置一个渠道不会关闭另一个。`--configure-wecom` 不依赖已有通知渠道：公共/自建模式使用当前选中的中转并打开一次性填写页，本机模式临时启动 loopback 配置页。提交后地址保存到受保护的本机配置；拒绝或过期保留原配置，不发送群消息。没有桌面浏览器时可直接运行 `scripts/setup_wecom.py --config <client.json> --no-open` 获得填写链接；loopback 链接仍仅限同电脑。填写后通过原工具进程状态确认 `wecom_configured`，不要要求用户回聊天确认。已有 `SECRET_REQUEST_WEBHOOK` 时，新安装自动引用；也可用 `--webhook-env` 指定其他变量名。变量需在客户端进程环境中可用。仅将变量名写入配置，完整 webhook 不进入日志或仓库。更新时保留已保存的通知设置。
 
-Windows/macOS 可通过 `--no-local-notification` 显式关闭本机通知，或通过 `--local-notification` 重新开启；已配置的 webhook 不受影响，后续更新和配置企微均保留已有选择。macOS 需 Apple Command Line Tools 和 `--build-notifier`。Linux 本机通知返回 unsupported，使用已配置的 webhook。通用 JSON webhook 保留兼容，当前主流程只要求企微。
+Windows/macOS 可通过 `--no-local-notification` 显式关闭本机通知，或通过 `--local-notification` 重新开启；已配置的 webhook 不受影响，后续更新和配置企微均保留已有选择。macOS 需 Apple Command Line Tools 和 `--build-notifier`。Linux 本机通知返回 unsupported，使用已配置的 webhook。通用 JSON webhook 仍然可用，当前主流程只要求企微。
 
 ### 本机快速启动
 
@@ -90,21 +90,13 @@ secret-request --agent-name Codex --name "测试库登录" --purpose "查询已�
 
 ### 填写链接
 
-中转默认仍返回旧链接，因为已经部署的客户端只接受这一种格式：
-
-`https://<服务>/input/<24 字符申请 ID>#<43 字符填写凭据>`
-
-43 个字符对应 256 位（`token_urlsafe(32)`）。在当前公共服务域名上，整条链接是 106 个字符。
-
-新客户端在本机通知程序能打开短链接时，创建申请发送请求头 `X-Secret-Request-Link: short`。只使用 webhook，或当前系统没有本机通知程序时，也发送该请求头。随安装包提供的 Windows 通知程序只接受旧链接；客户端用 `--supports-short-links` 探测，旧程序退出非 0，此时不发送该请求头。安装时加上 `--build-notifier`，或运行 `python3 scripts/build_native.py`，重新编译通知程序后，本机通知才会使用短链接。新中转只在看到这个精确值时返回短链接：
+中转只发出这一种填写链接：
 
 `https://<服务>/i#<22 字符填写凭据>`
 
-22 个字符对应 128 位（`token_urlsafe(16)`）。同一域名上是 56 个字符，例如 `https://secret-request.eicai.cc/i#` 再加 22 个字符。申请 ID 不放进链接。服务只保存填写凭据的 SHA-256，并按这个哈希查找申请。填写页带着同一凭据调用 `GET /api/input`，取回申请 ID 和公钥；AES-GCM 的附加数据仍是 `secret-request:v1:` 加上该 ID。领取凭据仍是 256 位，不出现在链接里。短链接不改变一次性提交、最长 30 分钟、撤销和创建频率限制。这次不新增必填服务配置，也不改域名。可选配置是填写页查询频率 `input_lookups_per_minute`（环境变量 `SECRET_REQUEST_INPUT_LOOKUPS_PER_MINUTE`，默认每来源每分钟 120 次，范围 1–1024）。
+22 个字符对应 128 位（`token_urlsafe(16)`）。在当前公共服务域名上是 44 个字符，例如 `https://sr.eicai.cc/i#` 再加 22 个字符。申请 ID 不放进链接。服务只保存填写凭据的 SHA-256，并按这个哈希查找申请。填写页带着同一凭据调用 `GET /api/input`，取回申请 ID 和公钥；AES-GCM 的附加数据仍是 `secret-request:v1:` 加上该 ID。领取凭据仍是 256 位，不出现在链接里。一次性提交、最长 30 分钟、撤销和创建频率限制不变，也不新增必填服务配置。可选配置是填写页查询频率 `input_lookups_per_minute`（环境变量 `SECRET_REQUEST_INPUT_LOOKUPS_PER_MINUTE`，默认每来源每分钟 120 次，范围 1–1024）。
 
-滚动时两边可以分开升级。只升级中转时，旧客户端不发送该请求头，继续收到旧链接。只升级客户端时，旧中转忽略这个请求头并返回旧链接，新客户端两种都接受。本机通知程序仍是旧版本时，新客户端也不请求短链接。中转、客户端和本机通知程序都更新之后，才会发出短链接。旧路径 `/input/<申请 ID>` 继续提供填写页，已经创建的申请仍用原来的凭据。
-
-`/#<22 字符凭据>` 也会打开填写页：首页发现片段是填写凭据时转到 `/i`。客户端同样接受这个根路径形式，方便以后把页面放在更短域名的 `/` 上。当前发出的链接仍是 `/i#凭据`，避免先闪一下首页。
+客户端和本机通知程序只接受 `/i#` 这一种链接。Windows 通知程序已随仓库提供，能打开这种链接。macOS 没有随包二进制，需要在本机用 `--build-notifier` 或 `python3 scripts/build_native.py` 编译。
 
 默认等待 600 秒。提交确认后尝试关页，不能自动关闭时显示手动关闭提示。拒绝、取消或过期不执行任务。默认建立空闲 300 秒的本机会话，合法执行结束后重新计时；状态查询不续期。
 
