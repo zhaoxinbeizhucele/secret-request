@@ -1,9 +1,11 @@
+import asyncio
 import base64
 from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
 import re
 from urllib.parse import urlsplit
+import httpx
 import pytest
 from secret_request.crypto import decrypt, public_jwk
 from secret_request.relay import Settings, create_app
@@ -296,6 +298,35 @@ def test_input_lookup_is_rate_limited_without_purging_on_malformed_tokens(key):
         other.close()
 
 
+def test_malformed_and_rate_limited_input_lookups_skip_the_request_lock(key):
+    async def scenario():
+        app = create_app(Settings("http://testserver", allow_local_http=True, input_lookups_per_minute=1),
+                         clock=lambda: 0.0)
+        release = asyncio.Event()
+
+        async def hold():
+            async with app.state.request_lock:
+                held.set()
+                await release.wait()
+
+        held = asyncio.Event()
+        holder = asyncio.create_task(hold())
+        await held.wait()
+        assert app.state.request_lock.locked()
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://testserver") as client:
+            malformed = await asyncio.wait_for(
+                client.get("/api/input", headers={"Authorization": "Bearer " + "x" * 10}), timeout=1)
+            limited = await asyncio.wait_for(
+                client.get("/api/input", headers={"Authorization": "Bearer " + "y" * 22}), timeout=1)
+        assert malformed.status_code == 404
+        assert limited.status_code == 429
+        assert not holder.done()
+        release.set()
+        await holder
+
+    asyncio.run(scenario())
+
+
 def test_malformed_tokens_never_resolve(system, key):
     client, app, tokens, now = system
     result = request(client, tokens, key, short_link=True)
@@ -324,7 +355,8 @@ def test_input_page_is_served_for_short_and_legacy_paths(system):
     script = client.get("/assets/app.js").text
     assert "/api/input" in script and "current.id" in script
     assert "location.reload()" in script and "history.replaceState" in script
-    assert "location.replace('/i'" in client.get("/assets/home.js").text
+    home = client.get("/assets/home.js").text
+    assert "location.replace('/i'" in home and "hashchange" in home
     assert 'id="fields"' not in client.get("/").text
 
 

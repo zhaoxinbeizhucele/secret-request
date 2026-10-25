@@ -238,3 +238,29 @@ def test_same_tab_short_link_switches_request(browser_system):
     assert not errors
     context.close()
 
+
+def test_same_tab_root_fragment_opens_input(browser_system):
+    browser, base = browser_system
+    context = browser.new_context()
+    page = context.new_page()
+    errors = []
+    page.on('pageerror', lambda error: errors.append(str(error)))
+    created = create(base, multiple=False, short=True, purpose='根路径片段')
+    token = created['url'].split('#', 1)[1]
+    page.goto(base + '/')
+    assert page.locator('#purpose').count() == 0
+    page.goto(base + '/#start')
+    assert page.url.endswith('#start')
+    assert page.locator('h1').inner_text() == '让机密走自己的通道'
+    try:
+        page.goto(base + '/#' + token)
+    except Exception as exc:
+        if 'interrupted' not in str(exc).lower() and 'ERR_ABORTED' not in str(exc):
+            raise
+        page.wait_for_load_state('load')
+    playwright.expect(page.locator('#purpose')).to_have_text('根路径片段')
+    assert page.evaluate('location.pathname') == '/i'
+    assert page.evaluate('location.hash') == ''
+    assert not errors
+    context.close()
+
