@@ -88,14 +88,12 @@ def _configure_client(url, destination, python, scripts, local, webhook_type, we
             config = json.loads(previous.decode('utf-8-sig'))
         except (ValueError, UnicodeError):
             raise ValueError('Invalid existing client configuration') from None
-        if not isinstance(config, dict) or set(config) - {'url', 'notifications', 'request_token'}:
+        if not isinstance(config, dict) or set(config) - {'url', 'notifications'}:
             raise ValueError('Invalid existing client configuration')
         if not isinstance(config.get('url'), str):
             raise ValueError('Invalid existing service URL')
         if url and config.get('url', '').rstrip('/') != url.rstrip('/'):
             raise ValueError('Another service is configured; it was not overwritten')
-        # Upgrade 0.2 without retaining or sending its obsolete enrollment credential.
-        config.pop('request_token', None)
     if url:
         config['url'] = url.rstrip('/')
     if not config.get('url'):
